@@ -1,0 +1,213 @@
+---
+title: "Input-demand-analysis"
+author: "jafshin"
+date: "13/05/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(sf)
+library(readxl)
+library(ggspatial)
+
+```
+
+## Reading inputs
+
+Here I am comparing Origin and Destinations to Census Journey to work
+
+```{r cars}
+
+outputDir <- "~/github/matsim-melbourne/demand/output/"
+plans <- read_csv(paste0(outputDir,"7.time/plan.csv"))
+attribs <- rbind(read_csv(paste0(outputDir,"3.match/match_1.csv")),
+                 read_csv(paste0(outputDir,"3.match/match_2.csv")),
+                 read_csv(paste0(outputDir,"3.match/match_3.csv")),
+                 read_csv(paste0(outputDir,"3.match/match_4.csv")),
+                 read_csv(paste0(outputDir,"3.match/match_5.csv")))
+
+plansWithAttrib <- plans %>% 
+  left_join(attribs, by = "AgentId")
+
+glimpse(plansWithAttrib)
+
+```
+
+
+Selecting the work trips
+
+```{r}
+tripsToWork <- plansWithAttrib %>% 
+  filter(Activity=="Work")
+
+glimpse(tripsToWork)
+```
+
+## OD analysis
+
+Aggregating ODs at SA3
+
+```{r}
+boundaries <- read_sf("~/ownCloud/Data/ABS_Boundaries/1270055001_sa1_2016_aust_shape/SA1_2016_AUST.shp") %>% 
+  st_transform(28355)
+
+agentHomes <- plansWithAttrib %>% 
+  filter(Activity=="Home") %>% 
+  mutate(HomeSA2=as.character(SA2_MAINCODE)) %>% 
+  dplyr::select(AgentId, HomeSA2) %>% 
+  distinct(AgentId, .keep_all=T)
+
+tripsToWorkSA3 <- tripsToWork %>%       
+  # mutate(GEOMETRY=paste0("POINT(",x," ",y,")")) %>%
+  # st_as_sf(wkt = "GEOMETRY", crs = 28355) %>% 
+  # st_join(boundaries)
+  mutate(SA1_MAINCODE_2016.x=as.character(SA1_MAINCODE_2016.x)) %>% 
+  left_join(st_drop_geometry(boundaries[,c("SA1_MAIN16","SA3_NAME16")]), by = c("SA1_MAINCODE_2016.x"="SA1_MAIN16")) %>% 
+  rename("DestinationSA3"="SA3_NAME16") %>% 
+  left_join(agentHomes, by="AgentId") %>% 
+  left_join(st_drop_geometry(boundaries[,c("SA2_MAIN16","SA3_NAME16")]), by = c("HomeSA2"="SA2_MAIN16")) %>% 
+  rename("HomeSA3"="SA3_NAME16")  %>% 
+  group_by(HomeSA3,DestinationSA3)  %>% 
+  summarise(numTrips=n()) %>% 
+  mutate(DemandTripPctPerHomeSA3=100*numTrips/sum(numTrips)) %>% 
+  dplyr::select(-numTrips) %>% 
+  ungroup()
+  
+ODPairs <- tripsToWorkSA3 %>% 
+  transmute(pairs=paste0(HomeSA3,"_",DestinationSA3))
+
+tripsToWorkSA3 %>% glimpse()
+# tripsToWorkSA3 %>% filter(HomeSA3==DestinationSA3)
+
+```
+
+
+```{r}
+censusOd <- read_csv("~/ownCloud/Data/ABS_Census/SA3 (UR) and SA3 (POW).csv", skip=9) %>% 
+  rename(HomeSA3=`SA3 (UR)`, DestinationSA3=`SA3 (POW)`) %>% 
+  dplyr::select(-Counting, -X5)  %>% 
+  filter(paste0(HomeSA3,"_",DestinationSA3) %in% ODPairs$pairs) %>%  
+  # filter(HomeSA3%in%tripsToWorkSA3$HomeSA3) %>% 
+  # filter(DestinationSA3%in%tripsToWorkSA3$DestinationSA3) %>% 
+  group_by(HomeSA3) %>% 
+  # mutate(numTrips=sum(Count)) %>% 
+  mutate(CensusTripPctPerHomeSA3=100*Count/sum(Count)) %>% 
+  dplyr::select(-Count)
+
+censusOd %>% glimpse()
+
+```
+
+Joining the two together
+
+```{r}
+
+ODPcts <- tripsToWorkSA3 %>% 
+  left_join(censusOd, by = c("HomeSA3","DestinationSA3")) 
+
+ODPcts %>% 
+  ggplot(aes(x = CensusTripPctPerHomeSA3, y= DemandTripPctPerHomeSA3))+
+  geom_point() + scale_x_continuous(trans='log2') +
+  scale_y_continuous(trans='log2')
+
+```
+
+```{r}
+ODError <- tripsToWorkSA3 %>% 
+  left_join(censusOd, by = c("HomeSA3","DestinationSA3")) %>%  
+  mutate(deltaSq=(DemandTripPctPerHomeSA3-CensusTripPctPerHomeSA3)^2) %>% 
+  group_by(HomeSA3) %>%
+  summarise(rmse=sqrt(sum(deltaSq)/n())) 
+
+
+ODError$HomeSA3 <- factor(ODError$HomeSA3, levels = ODError$HomeSA3[order(ODError$rmse)])
+ODError %>% 
+  arrange(desc(rmse)) %>% 
+  ggplot(aes(x=rmse,y=HomeSA3, fill=rmse)) +
+  geom_col() +
+  scale_fill_viridis_c()
+
+
+```
+
+
+```{r}
+SA3sMap <- boundaries %>% filter(SA3_NAME16%in%tripsToWorkSA3$HomeSA3) %>% 
+  group_by(SA3_NAME16) %>% 
+  summarise(geometry=st_union(geometry)) 
+
+SA3sMap %>% 
+  left_join(ODError, by=c("SA3_NAME16"="HomeSA3")) %>% 
+  ggplot() +
+  annotation_map_tile(type="osmgrayscale",zoom=9) +
+  geom_sf(aes(fill = rmse)) +
+  scale_fill_viridis_c(trans = "sqrt", alpha = .4) 
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/od-rmse.png")
+```
+
+## Mode share for trips to work data
+
+Reading census JTW modes and calculating mode shares
+
+```{r}
+
+censusModes <- read_csv("~/ownCloud/Data/ABS_Census/SA3 (UR) and MTW15P Method of Travel to Work (15 travel modes).csv", 
+                        skip=9) %>%
+  rename(HomeSA3=`SA3 (UR)`,
+         MTW=`MTW15P Method of Travel to Work (15 travel modes)`) %>%
+  dplyr::select(-Counting, -X5) %>%
+  filter(HomeSA3 %in% unique(tripsToWorkSA3$HomeSA3)) %>% 
+  mutate(mode=case_when(MTW=="Bicycle" ~ "bike",
+                        MTW%in%c("Car, as driver","Car, as passenger") ~ "car",
+                        MTW%in%c("Bus","Train") ~ "pt",
+                        MTW=="Walked only" ~ "walk",
+                        TRUE ~ "other")) %>% 
+  filter(mode!="other") %>% 
+  group_by(mode) %>% 
+  summarise(nTrips=sum(Count)) %>% 
+  mutate(censusModePct=100*nTrips/sum(nTrips)) %>% 
+  dplyr::select(mode, censusModePct)
+
+censusModes %>% glimpse()
+
+```
+
+Getting the mode share from input demand JTW
+
+```{r}
+
+demandModes <- tripsToWork %>% 
+  group_by(ArrivingMode) %>% 
+  summarise(nTrips=n()) %>% 
+  mutate(demandModePct=100*nTrips/sum(nTrips)) %>% 
+  dplyr::select(mode=ArrivingMode, demandModePct)
+
+demandModes %>% glimpse()
+
+```
+
+Plotting the mode
+
+```{r}
+
+demandModes %>% 
+  left_join(censusModes, by="mode") %>%
+  rename(`Virtual Population`=demandModePct,
+         `Census JTW`=censusModePct) %>% 
+  pivot_longer(cols = c(`Virtual Population`,`Census JTW`), names_to="source") %>% 
+  ggplot(aes(x=mode, y=value, fill=source)) +
+  geom_col(position = "dodge") +
+  scale_fill_viridis_d(begin = 0.0, end = 0.85, alpha = 0.7)
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/modeDist.png",
+       width=5,height = 3)
+
+```
+
+
