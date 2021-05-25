@@ -39,7 +39,8 @@ col_spec <- cols(
   PERIOD_TYPE = col_character()
 )
 
-carData <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/car/TYPICAL_HOURLY_VOLUME_DATA.csv", col_types = col_spec)
+# carData <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/car/TYPICAL_HOURLY_VOLUME_DATA.csv", col_types = col_spec)
+carData <- read_csv("./data/observations/car/TYPICAL_HOURLY_VOLUME_DATA.csv", col_types = col_spec)
 
 carDataFiltered <- carData %>% 
   filter(PERIOD_TYPE=="SCHOOL TERM/NORMAL") %>% 
@@ -56,7 +57,8 @@ carDataFiltered <- carData %>%
 Reading Greater Melbourne Boundaries for mapping:
 
 ```{r}
-GMelbBoundary <- read_sf("~/ownCloud/Data/ABS_Boundaries/1270055001_sa1_2016_aust_shape/SA1_2016_AUST.shp") %>% 
+# GMelbBoundary <- read_sf("~/ownCloud/io.github.jafshin/calibration-validation/data/boundaries/ABS_Boundaries/1270055001_sa1_2016_aust_shape/SA1_2016_AUST.shp") %>% 
+GMelbBoundary <- read_sf("./data/boundaries/1270055001_sa1_2016_aust_shape/SA1_2016_AUST.shp") %>% 
   st_transform(28355) %>% 
   filter(GCC_NAME16=="Greater Melbourne") %>% 
   summarise(geometry=st_union(geometry)) 
@@ -72,7 +74,8 @@ Adding geometry to the roads
 
 # ROAD_NBR	Number	8	ROAD_NUMBER
 
-htvnData <- st_read("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/car/homogenous_traffic_flow-shp/3ad2d9d5-dd49-40bf-86c4-ccf114d2e4582020328-1-cs85vw.3kgy7.shp") %>% 
+# htvnData <- st_read("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/car/homogenous_traffic_flow-shp/3ad2d9d5-dd49-40bf-86c4-ccf114d2e4582020328-1-cs85vw.3kgy7.shp") %>% 
+htvnData <- st_read("./data/observations/car/homogenous_traffic_flow-shp/3ad2d9d5-dd49-40bf-86c4-ccf114d2e4582020328-1-cs85vw.3kgy7.shp") %>% 
   st_transform(28355) %>% 
   mutate(HMGNS_FLOW_ID=as.character(HMGNS_FLOW))
 
@@ -90,7 +93,8 @@ st_write(carDataJoined, "carDataJoined.sqlite", delete_dsn = T)
 Crop to greater Melbourne
 
 ```{r}
-gMelbBoundary <- st_read("~/ownCloud/Data/ABS_Boundaries/GreaterMelbourneArea/GMEL_SA4_2016_Polygons.sqlite")  %>% 
+# gMelbBoundary <- st_read("~/ownCloud/Data/ABS_Boundaries/GreaterMelbourneArea/GMEL_SA4_2016_Polygons.sqlite")  %>% 
+gMelbBoundary <- st_read("./data/boundaries/GreaterMelbourneArea/GMEL_SA4_2016_Polygons.sqlite")  %>% 
   st_transform(28355)
   
 carDataCroped <- carDataJoined %>% 
@@ -182,7 +186,8 @@ Reading the input files
 
 ```{r}
 
-paths <- dir_ls("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/bicycle/2018-03/",glob = "*.zip" )
+# paths <- dir_ls("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/bicycle/2018-03/",glob = "*.zip" )
+paths <- dir_ls("./data/calibration-validation/data/observations/bicycle/2018-03/",glob = "*.zip" )
 # Extracting all the bike count data
 walk(paths, ~unzip(.x, exdir = "data/cyclingVolFiles"))
 
@@ -298,7 +303,8 @@ Reading the location points
 
 ```{r}
 
-cycleCountersMeta <- read_xlsx("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/bicycle/VicRoads_Bike_Site_Number_Listing.xlsx",
+# cycleCountersMeta <- read_xlsx("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/bicycle/VicRoads_Bike_Site_Number_Listing.xlsx",
+cycleCountersMeta <- read_xlsx("./data/calibration-validation/data/observations/bicycle/VicRoads_Bike_Site_Number_Listing.xlsx",
           skip=2, col_names=c("id", "site", "gps", "desc", "comment")) %>% 
   dplyr::filter(!is.na(id))
 
@@ -370,7 +376,8 @@ col_spec <- cols(
 )
 
 
-walkData <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Monthly__counts_per_hour_.csv", col_types = col_spec) 
+# walkData <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Monthly__counts_per_hour_.csv", col_types = col_spec) 
+walkData <- read_csv("./data/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Monthly__counts_per_hour_.csv", col_types = col_spec) 
 
 walkData %>% glimpse()
 ```
@@ -410,7 +417,8 @@ col_spec <- cols(
   location = col_character()
 )
 
-walkSensorLocs <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Sensor_Locations.csv", col_types = col_spec)
+# walkSensorLocs <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Sensor_Locations.csv", col_types = col_spec)
+walkSensorLocs <- read_csv("./data/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Sensor_Locations.csv", col_types = col_spec)
 
 walkSensorLocs %>% glimpse()
 ```
@@ -450,7 +458,8 @@ Reading stations' patronage survey data
 
 ```{r}
 
-stationData <- readxl::read_excel("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/pt/2016 Station Access Mode.xlsx",sheet = "Sheet2", skip = 3)  
+# stationData <- readxl::read_excel("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/pt/2016 Station Access Mode.xlsx",sheet = "Sheet2", skip = 3)  
+stationData <- readxl::read_excel("./data/calibration-validation/data/observations/pt/2016 Station Access Mode.xlsx",sheet = "Sheet2", skip = 3)  
 
   
 stationDataFiltered <- stationData %>%   
@@ -470,7 +479,8 @@ col_spec <- cols(
   stop_lon = col_double()
 )
 
-stationLocations <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/pt/stops.txt", col_types = col_spec) %>% 
+# stationLocations <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/pt/stops.txt", col_types = col_spec) %>% 
+stationLocations <- read_csv("./data/calibration-validation/data/observations/pt/stops.txt", col_types = col_spec) %>% 
   mutate(stationID=as.character(stop_id)) %>% 
   dplyr::select(stationID, stop_lat, stop_lon)
 
