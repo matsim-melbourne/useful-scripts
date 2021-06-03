@@ -14,6 +14,9 @@ library(lubridate)
 library(readxl)
 # library(rosm)
 library(ggspatial)
+library(lwgeom)
+library(stringr)
+library(igraph)
 ```
 
 ## Car traffic data
@@ -95,7 +98,8 @@ Crop to greater Melbourne
 ```{r}
 # gMelbBoundary <- st_read("~/ownCloud/Data/ABS_Boundaries/GreaterMelbourneArea/GMEL_SA4_2016_Polygons.sqlite")  %>% 
 gMelbBoundary <- st_read("./data/boundaries/GreaterMelbourneArea/GMEL_SA4_2016_Polygons.sqlite")  %>% 
-  st_transform(28355)
+  st_transform(28355) %>%
+  summarise()  # to dissolve SA4s (without this, roads get split at SA4 boundaries)
   
 carDataCroped <- carDataJoined %>% 
   st_intersection(gMelbBoundary)
@@ -150,7 +154,7 @@ pmCarData <- carDataCroped %>%
 
 ```
 
-finding high volume AM roads
+finding high volume PM roads
 
 ```{r}
 
@@ -187,7 +191,9 @@ Reading the input files
 ```{r}
 
 # paths <- dir_ls("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/bicycle/2018-03/",glob = "*.zip" )
-paths <- dir_ls("./data/calibration-validation/data/observations/bicycle/2018-03/",glob = "*.zip" )
+paths <- dir_ls("./data/observations/bicycle/2018-03/",glob = "*.zip" )
+
+
 # Extracting all the bike count data
 walk(paths, ~unzip(.x, exdir = "data/cyclingVolFiles"))
 
@@ -304,7 +310,7 @@ Reading the location points
 ```{r}
 
 # cycleCountersMeta <- read_xlsx("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/bicycle/VicRoads_Bike_Site_Number_Listing.xlsx",
-cycleCountersMeta <- read_xlsx("./data/calibration-validation/data/observations/bicycle/VicRoads_Bike_Site_Number_Listing.xlsx",
+cycleCountersMeta <- read_xlsx("./data/observations/bicycle/VicRoads_Bike_Site_Number_Listing.xlsx",
           skip=2, col_names=c("id", "site", "gps", "desc", "comment")) %>% 
   dplyr::filter(!is.na(id))
 
@@ -377,7 +383,7 @@ col_spec <- cols(
 
 
 # walkData <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Monthly__counts_per_hour_.csv", col_types = col_spec) 
-walkData <- read_csv("./data/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Monthly__counts_per_hour_.csv", col_types = col_spec) 
+walkData <- read_csv("./data/observations/walk/Pedestrian_Counting_System_-_Monthly__counts_per_hour_.csv", col_types = col_spec) 
 
 walkData %>% glimpse()
 ```
@@ -418,7 +424,7 @@ col_spec <- cols(
 )
 
 # walkSensorLocs <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Sensor_Locations.csv", col_types = col_spec)
-walkSensorLocs <- read_csv("./data/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Sensor_Locations.csv", col_types = col_spec)
+walkSensorLocs <- read_csv("./data/observations/walk/Pedestrian_Counting_System_-_Sensor_Locations.csv", col_types = col_spec)
 
 walkSensorLocs %>% glimpse()
 ```
@@ -459,7 +465,7 @@ Reading stations' patronage survey data
 ```{r}
 
 # stationData <- readxl::read_excel("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/pt/2016 Station Access Mode.xlsx",sheet = "Sheet2", skip = 3)  
-stationData <- readxl::read_excel("./data/calibration-validation/data/observations/pt/2016 Station Access Mode.xlsx",sheet = "Sheet2", skip = 3)  
+stationData <- readxl::read_excel("./data/observations/pt/2016 Station Access Mode.xlsx",sheet = "Sheet2", skip = 3)  
 
   
 stationDataFiltered <- stationData %>%   
@@ -480,9 +486,18 @@ col_spec <- cols(
 )
 
 # stationLocations <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/pt/stops.txt", col_types = col_spec) %>% 
-stationLocations <- read_csv("./data/calibration-validation/data/observations/pt/stops.txt", col_types = col_spec) %>% 
+stationLocations <- read_csv("./data/observations/pt/stops.txt", col_types = col_spec) %>% 
   mutate(stationID=as.character(stop_id)) %>% 
-  dplyr::select(stationID, stop_lat, stop_lon)
+  # filter to rows containing 'Railway Station' and not '/' (used for bus or tram stops at stations) 
+  filter(grepl("Railway Station", stop_name) & !grepl("/", stop_name)) %>%
+  # replace the pattern 'space + Railway + any number of other characters' with nothing
+  mutate(stationName = gsub(" Railway.*","", stop_name)) %>%
+  # fix some name mismatches between patronage and GTFS names
+  mutate(stationName = if_else(stationName=="McKinnon", "Mckinnon",
+                               if_else(stationName=="Jolimont-MCG", "Jolimont",
+                                       if_else(stationName=="Showgrounds", "Showgrounds Station",
+                                               stationName)))) %>%
+  dplyr::select(stationName, stop_lat, stop_lon)
 
 ```
 
@@ -490,7 +505,9 @@ Joining stop locations to the patronage data
 
 ```{r}
 stationDataCoordinated <- stationDataFiltered %>% 
-  left_join(stationLocations, by="stationID")
+  left_join(stationLocations, by="stationName") %>%
+  # remove duplicates (eg where Vline contains metro and Vline with same name)
+  distinct(stationName, .keep_all=T)  
 
 write_csv(stationDataCoordinated, "stationDataCoordinated.csv")
 stationDataCoordinated %>% glimpse()
@@ -521,6 +538,105 @@ stationDataWithGeom %>%
   scale_fill_viridis_c(trans = "sqrt", alpha = .4) 
 
 ```
+
+```{r}
+st_write(stationDataWithGeom, "stationDataWithGeom.sqlite", delete_dsn = T)
+```
+
+
+### Adding links from MATSim Network
+
+Make a subgraph of links and nodes that includes stations, and filter to subgraph
+
+```{r}
+# read in links and nodes; filter to PT over 400m (smallest station distance Riversdale-Willison 418m:
+# https://maps.philipmallis.com/distances-between-melbourne-railway-stations-a-quick-map/ )
+links <- st_read("./generatedNetworks/MATSimMelbNetwork.sqlite", layer = "links") %>%
+  mutate(link_id = row_number()) %>%
+  filter(highway == "pt" & length > 400)
+
+nodes <- st_read("./generatedNetworks/MATSimMelbNetwork.sqlite", layer = "nodes") %>%
+   filter(id %in% links$from_id | id %in% links$to_id)
+
+# make graph; find nodes from largest connected sub-graph; filter nodes and links accordingly
+# see https://stackoverflow.com/questions/64344845/getting-the-biggest-connected-component-in-r-igraph
+graph <- graph_from_data_frame(links, directed = F, vertices = nodes)
+   
+components <- clusters(graph)
+biggest_cluster_id <- which.max(components$csize)
+vertices <- V(graph)[components$membership == biggest_cluster_id]
+vert_ids <- as.numeric(vertices$name)
+
+nodes <- nodes %>%
+  filter(id %in% vert_ids) %>%
+  st_intersection(gMelbBoundary)
+
+links <- links %>%
+  filter(from_id %in% nodes$id & to_id %in% nodes$id)
+
+```
+
+
+Map of the remaining network to check that it appears to include stations
+
+```{r}
+ggplot() + 
+  geom_sf(data = links, color = 'red') +
+  geom_sf(data = nodes, color = 'blue')
+
+```
+
+
+Find the nearest node to each station, and add to patronage data
+
+```{r}
+# read in station patronage data, and add column for node_id
+stationDataWithGeom <- st_read("./stationDataWithGeom.sqlite", layer = "stationdatawithgeom")
+
+# find nearest nodes (st_nearest_feature returns the index; find the corresponding node id in 'nodes')
+nearest.nodes <- nodes[st_nearest_feature(stationDataWithGeom, nodes), "id"] %>%
+  st_drop_geometry()
+
+# add to station patronage data - but not for Flemington Racecourse and Showgrounds: they are not
+# in the links/nodes network, so their 'nearest nodes' are distant station
+stationDataWithGeom <- stationDataWithGeom %>%
+  mutate(node_id = ifelse(stationname %in% c("Showgrounds Station", "Flemington Racecourse"), NA,
+                          nearest.nodes$id))
+
+# write output
+st_write(stationDataWithGeom, "stationDataWithGeom.sqlite", delete_dsn = T)
+
+```
+
+Checking the output
+
+```{r}
+# load patronage data (stops) and connecting links
+rail.stops <- st_read("./stationDataWithGeom.sqlite", layer = "stationdatawithgeom")
+rail.lines <- links %>%
+  filter(from_id %in% rail.stops$node_id & to_id %in% rail.stops$node_id)
+
+# check that it appears to be a connected network (except for Showgrounds and Flemington Racecourse)
+# note that there are also  other links for express services
+# note link gap between Highett and Cheltenham, because Southland station missing from patronage data
+ggplot() + 
+  geom_sf(data = rail.stops, color = 'red') +
+  geom_sf(data = rail.lines, color = 'blue')
+```
+
+```{r}
+# make graph to check that all stops are in fact connected
+rail.graph <- graph_from_data_frame(rail.lines, directed = F)
+
+# count vertices in largest subgraph
+components <- clusters(rail.graph)
+biggest_cluster_id <- which.max(components$csize)
+vertices <- V(rail.graph)[components$membership == biggest_cluster_id]
+no.vertices <- length(vertices)
+no.vertices  # should be 216 (218 stations in patronage data, excl. Showgrounds and Flemington Racecourse)
+
+```
+
 
 
 #### Other potential sources for pt data: 
