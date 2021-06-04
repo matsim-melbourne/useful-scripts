@@ -17,6 +17,10 @@ library(ggspatial)
 library(lwgeom)
 library(stringr)
 library(igraph)
+library(nngeo)  # for st_azimuth
+
+source('./functions/addNetworkDetails.R')
+
 ```
 
 ## Car traffic data
@@ -183,6 +187,39 @@ pmHighVolCarData %>%
   scale_fill_viridis_c(trans = "sqrt", alpha = .8) 
 
 ```
+
+### Adding links from MATSim Network
+
+Add to AM peak data
+
+```{r}
+
+amHighVolCarData <- addCarLinks(carData = "./amHighVolCarData.sqlite", layer = "amhighvolcardata")
+st_write(amHighVolCarData, "amHighVolCarData.sqlite", delete_dsn = T)
+
+glimpse(amHighVolCarData)
+
+# ggplot() + 
+#   annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) + 
+#   geom_sf(data = amHighVolCarData, colour = 'red') 
+
+```
+
+Add to PM peak data
+
+```{r}
+pmHighVolCarData <- addCarLinks(carData = "./pmHighVolCarData.sqlite", layer = "pmhighvolcardata")
+st_write(pmHighVolCarData, "pmHighVolCarData.sqlite", delete_dsn = T)
+
+glimpse(pmHighVolCarData)
+
+# ggplot() + 
+#   annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) + 
+#   geom_sf(data = pmHighVolCarData, colour = 'red') 
+
+```
+
+
 
 ## Bicycle traffic simulation
 
@@ -544,89 +581,34 @@ st_write(stationDataWithGeom, "stationDataWithGeom.sqlite", delete_dsn = T)
 ```
 
 
-### Adding links from MATSim Network
+### Adding nodes from MATSim Network
 
-Make a subgraph of links and nodes that includes stations, and filter to subgraph
-
-```{r}
-# read in links and nodes; filter to PT over 400m (smallest station distance Riversdale-Willison 418m:
-# https://maps.philipmallis.com/distances-between-melbourne-railway-stations-a-quick-map/ )
-links <- st_read("./generatedNetworks/MATSimMelbNetwork.sqlite", layer = "links") %>%
-  mutate(link_id = row_number()) %>%
-  filter(highway == "pt" & length > 400)
-
-nodes <- st_read("./generatedNetworks/MATSimMelbNetwork.sqlite", layer = "nodes") %>%
-   filter(id %in% links$from_id | id %in% links$to_id)
-
-# make graph; find nodes from largest connected sub-graph; filter nodes and links accordingly
-# see https://stackoverflow.com/questions/64344845/getting-the-biggest-connected-component-in-r-igraph
-graph <- graph_from_data_frame(links, directed = F, vertices = nodes)
-   
-components <- clusters(graph)
-biggest_cluster_id <- which.max(components$csize)
-vertices <- V(graph)[components$membership == biggest_cluster_id]
-vert_ids <- as.numeric(vertices$name)
-
-nodes <- nodes %>%
-  filter(id %in% vert_ids) %>%
-  st_intersection(gMelbBoundary)
-
-links <- links %>%
-  filter(from_id %in% nodes$id & to_id %in% nodes$id)
-
-```
-
-
-Map of the remaining network to check that it appears to include stations
+Add station nodes
 
 ```{r}
-ggplot() + 
-  geom_sf(data = links, color = 'red') +
-  geom_sf(data = nodes, color = 'blue')
-
-```
-
-
-Find the nearest node to each station, and add to patronage data
-
-```{r}
-# read in station patronage data, and add column for node_id
-stationDataWithGeom <- st_read("./stationDataWithGeom.sqlite", layer = "stationdatawithgeom")
-
-# find nearest nodes (st_nearest_feature returns the index; find the corresponding node id in 'nodes')
-nearest.nodes <- nodes[st_nearest_feature(stationDataWithGeom, nodes), "id"] %>%
-  st_drop_geometry()
-
-# add to station patronage data - but not for Flemington Racecourse and Showgrounds: they are not
-# in the links/nodes network, so their 'nearest nodes' are distant station
-stationDataWithGeom <- stationDataWithGeom %>%
-  mutate(node_id = ifelse(stationname %in% c("Showgrounds Station", "Flemington Racecourse"), NA,
-                          nearest.nodes$id))
-
-# write output
+stationDataWithGeom <- addStationNodes(patronageData = "./stationDataWithGeom.sqlite", 
+                                       layer = "stationdatawithgeom")
 st_write(stationDataWithGeom, "stationDataWithGeom.sqlite", delete_dsn = T)
 
-```
 
-Checking the output
+# Check that result is a connected network (except for Showgrounds and Flemington Racecourse)
+# Note that there are also  other links for express services
+# Note link gap between Highett and Cheltenham, because Southland station missing from patronage data
+rail.lines <- st_read("./generatedNetworks/MATSimMelbNetwork.sqlite", layer = "links", quiet=T) %>%
+  filter(from_id %in% stationDataWithGeom$node_id & to_id %in% stationDataWithGeom$node_id)
 
-```{r}
-# load patronage data (stops) and connecting links
-rail.stops <- st_read("./stationDataWithGeom.sqlite", layer = "stationdatawithgeom")
-rail.lines <- links %>%
-  filter(from_id %in% rail.stops$node_id & to_id %in% rail.stops$node_id)
-
-# check that it appears to be a connected network (except for Showgrounds and Flemington Racecourse)
-# note that there are also  other links for express services
-# note link gap between Highett and Cheltenham, because Southland station missing from patronage data
 ggplot() + 
-  geom_sf(data = rail.stops, color = 'red') +
+  geom_sf(data = stationDataWithGeom, color = 'red') +
   geom_sf(data = rail.lines, color = 'blue')
+
 ```
+
+Further check that results form a connected graph of 216 stations
 
 ```{r}
 # make graph to check that all stops are in fact connected
-rail.graph <- graph_from_data_frame(rail.lines, directed = F)
+rail.graph <- graph_from_data_frame(rail.lines, directed = F) %>%
+  suppressWarnings()
 
 # count vertices in largest subgraph
 components <- clusters(rail.graph)
