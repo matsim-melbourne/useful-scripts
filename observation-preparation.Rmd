@@ -277,7 +277,7 @@ cyclingVolFiltered <- cyclingVol %>%
 ```
 
 
-Counting cycling trips based on counter location, direcation/leg, date and hour of the day
+Counting cycling trips based on counter location, direction, date and hour of the day
 
 ```{r}
 cyclingVolCounted <- cyclingVolFiltered %>% 
@@ -298,8 +298,8 @@ cyclingVolAverage <- cyclingVolCounted %>%
   summarise(avgCount=round(mean(count))) %>% 
   ungroup() %>% 
   mutate(siteNumber=as.character(SITE_XN_ROUTE)) %>% 
-  mutate(legNumber=as.character(LOC_LEG)) %>% 
-  dplyr::select(siteNumber, legNumber, dir=DIRECTION, hour, count=avgCount) 
+  mutate(directionID=as.character(LOC_LEG)) %>% 
+  dplyr::select(siteNumber, directionID, dir=DIRECTION, hour, count=avgCount) 
 
 glimpse(cyclingVolAverage)
 
@@ -309,7 +309,7 @@ glimpse(cyclingVolAverage)
 
 ```{r}
 
-cyclingVolAverage %>% count(siteNumber, legNumber, dir) %>% 
+cyclingVolAverage %>% count(siteNumber, directionID, dir) %>% 
   ggplot(aes(x=dir, y=n))+
   geom_col(aes(fill=dir))
 
@@ -348,39 +348,17 @@ Reading the location points
 
 # cycleCountersMeta <- read_xlsx("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/bicycle/VicRoads_Bike_Site_Number_Listing.xlsx",
 cycleCountersMeta <- read_xlsx("./data/observations/bicycle/VicRoads_Bike_Site_Number_Listing.xlsx",
-          skip=2, col_names=c("id", "site", "gps", "desc", "comment")) %>% 
-  dplyr::filter(!is.na(id))
+          skip=2, col_names=c("id", "site", "gps", "desc", "comment")) 
 
 cycleCountersMeta %>% glimpse()
 
 ```
 
-```{r}
-cycleCounterCoordinated <- cycleCountersMeta %>% 
-  # Extracting the site number
-  mutate(siteNumber=stringr::str_extract(site,pattern = "X[0-9]+")) %>% 
-  mutate(siteNumber=stringr::str_extract(siteNumber,pattern = "[0-9]+")) %>%
-  # Extracting the leg number
-  mutate(legNumber=stringr::str_extract(site,pattern = "P[0-9]+")) %>% 
-  mutate(legNumber=stringr::str_extract(legNumber,pattern = "[0-9]+")) %>% 
-  # Extracting the long lat
-  mutate(lat=stringr::str_extract(gps,pattern = "-[0-9]+.[0-9]+")) %>% 
-  mutate(long=stringr::str_extract(gps,pattern = "\\+[0-9]+.[0-9]+")) %>% 
-  st_as_sf(coords = c("long", "lat"), crs = 4326) %>% 
-  st_transform(28355) %>% 
-  dplyr::select(siteNumber, legNumber, desc, comment, geometry)
-
-cycleCounterCoordinated %>% glimpse()
-```
-
-Joining cooridates to the count data
+Adding the location points to the count data
 
 ```{r}
-
-cyclingVolCoordinated <- cyclingVolAverage %>% 
-  left_join(cycleCounterCoordinated, by = c("siteNumber","legNumber")) %>% 
-  st_as_sf() %>% 
-  filter(!is.na(desc))
+cyclingVolCoordinated <- addBikeLinks(cyclingVolAverage = cyclingVolAverage,
+                         cycleCountersMeta = cycleCountersMeta)
 
 st_write(cyclingVolCoordinated, "cyclingVolCoordinated.sqlite", delete_layer=T)
 
@@ -391,7 +369,7 @@ Mapping selected cycling count locations
 
 ```{r}
 cyclingVolCoordinated %>% 
-  group_by(siteNumber,legNumber) %>% 
+  group_by(siteNumber,directionID) %>% 
   summarise(totalVol=sum(count)) %>%  
   ggplot() +
   annotation_map_tile(type="osmgrayscale",zoom=10, alpha=0.8) +
