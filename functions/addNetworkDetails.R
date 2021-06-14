@@ -323,9 +323,200 @@ addBikeLinks <- function(cyclingVolAverage,
 # 3. Walking data
 # -----------------------------------------------------------------------------
 # Function to add links from network to walking data.  Approach:
-# TBC
+# - filter Network to walkable links
+# - select links in a 50m buffer around each sampling site, and dupicate any one way
+# - for each of the sensor's two directions, filter out any that are in wrong direction
+# - filter out any where azimuth (bearing) is > 'az.tol' degrees away from road:
+  # - 'az.tol' is generally 30 degrees, but needs adustment for some sites
+  # - and note directions adjusted for different grid pattern in CBD vs elsewhere
+# - for each of the sensor's two directions, select the remaining link closest to the sensor site
+# - add the link row number to the cycling data
+# - also add the link's from and to node id's
 
-
+addWalkLinks <- function(walkData,
+                         layer,
+                         walkSensorLocs,
+                         network = "./generatedNetworks/MATSimMelbNetwork.sqlite") {
+  
+  # read in sensor locations, and add columns for link_row and node from_ and to_ id's 
+  locationTable <- walkSensorLocs %>%
+    # remove where no direction (these locations don't appearin walkData)
+    filter(!is.na(direction_1) & !is.na(direction_2)) %>%
+    st_as_sf(coords = c("longitude", "latitude"), remove=F, crs = 4326) %>%
+    st_transform(28355)
+  
+  # read in links and nodes
+  links <- st_read(network, layer = "links", quiet=T) %>%
+    mutate(link_id = row_number()) %>%
+    # filter to walkable links
+    filter(is_walk == 1)
+  
+  nodes <- st_read(network, layer = "nodes", quiet=T) %>%
+    # filter to nodes used in links, to remove any disconnected (not really necessary)
+    filter(id %in% links$from_id | id %in% links$to_id)
+  
+  for (i in 1:nrow(locationTable)) {
+    
+    # set az.adj (azimuth adjustment) to match grid pattern - in CBD (northing <= 5813600), 
+    # 'north' is about az 339; elsewhere (northing > 5813600, 'north' is about az 6)
+    if (st_coordinates(locationTable[i, "geometry"])[, "Y"] <= 5813600) {
+      az.adj <- -21
+    } else {
+      az.adj <- 6
+    }
+    
+    # set az.tol (azimuth tolerance) to exclude links too far from target azimuth (bearing)
+    # generally 30 degrees is effective; some need special override
+    sensor_id <- locationTable[i, "sensor_id"] %>%
+      st_drop_geometry()
+    if (sensor_id == 14) {  # Sandridge Bridge, off-grid alignment
+      az.tol <- 65
+    } else if (sensor_id == 21) {  # Russell St nr Bourke St, avoid nearby lane 
+      az.tol <- 15
+    } else if (sensor_id == 40) {  # Spring St nr Lonsdale St, footpath alignment nr Parliament Stn
+      az.tol <- 45
+    } else if (sensor_id == 72) {  # Flinders St, avoid path through Fed Sq
+      az.tol <- 10
+    } else {  # default for all other sensors
+      az.tol <- 30
+    }
+    
+    # buffer the location to 100m
+    local.area <- st_buffer(locationTable[i, ], 50)
+    
+    # find links in the local area, and duplicate in opposite direction if two way
+    filtered.links <- links %>%
+      filter(st_intersects(GEOMETRY, local.area, sparse = FALSE)) %>%
+      mutate(correct_az_1 = 0, correct_az_2 = 0)
+    
+    potential.links.oneway <- filtered.links %>%
+      filter(is_oneway == 1)
+    
+    potential.links.twoway <- filtered.links %>%
+      filter(is_oneway == 0)
+    
+    potential.links.twoway.reversed <- potential.links.twoway %>%
+      mutate(new.from = to_id, new.to = from_id) %>%
+      mutate(from_id = new.from, to_id = new.to)
+    
+    potential.links <- dplyr::bind_rows(potential.links.oneway,
+                                        potential.links.twoway,
+                                        potential.links.twoway.reversed) %>%
+      dplyr::select(link_id, from_id, to_id, correct_az_1, correct_az_2)
+    
+    # add azimuth to potential links
+    for (j in 1:nrow(potential.links)) {
+      link <- potential.links[j, ]
+      azimuth <- st_azimuth(nodes[nodes$id == link$from_id, ], 
+                            nodes[nodes$id == link$to_id, ])
+      potential.links[j, "azimuth"] <- azimuth
+      
+      # for direction_1 and direction_2, filter to links within azimuth tolerance
+      for (k in c("direction_1", "direction_2")) {
+        # get direction of direction_1 or direction_2 as applicable
+        direction <- locationTable[i, k] %>% 
+          st_drop_geometry()
+        
+        # get azimuth of the potential link
+        azimuth <- potential.links[j, "azimuth"] %>%
+          st_drop_geometry()
+        
+        # set correct_az_1 or correct_az_2 to 1 if azimuth is within az.tol of direction
+        if (direction == "North") {
+          if (abs(az.adj) > az.tol) {  # where abs(az.adj) > az.tol, tolerance zone cannot cross 360
+            if (azimuth > 360 + az.adj - az.tol &
+                azimuth < 360 + az.adj + az.tol) {
+              if (k == "direction_1") {
+                potential.links[j, "correct_az_1"] <- 1
+              } else if (k == "direction_2") {
+                potential.links[j, "correct_az_2"] <- 1
+              }
+            }
+          } else { # otherwise, crosses 360
+            if (azimuth > 360 + az.adj - az.tol |
+                azimuth < az.adj + az.tol) {
+              if (k == "direction_1") {
+                potential.links[j, "correct_az_1"] <- 1
+              } else if (k == "direction_2") {
+                potential.links[j, "correct_az_2"] <- 1
+              }
+            }
+          }
+        } else if (direction == "East") {
+          if (azimuth > 90 + az.adj - az.tol &
+              azimuth < 90 + az.adj + az.tol) {
+            if (k == "direction_1") { 
+              potential.links[j, "correct_az_1"] <- 1
+            } else if (k == "direction_2") {
+              potential.links[j, "correct_az_2"] <- 1
+            }
+          }
+        } else if (direction == "South") {
+          if (azimuth > 180 + az.adj - az.tol &
+              azimuth < 180 + az.adj + az.tol) {
+            if (k == "direction_1") {
+              potential.links[j, "correct_az_1"] <- 1
+            } else if (k == "direction_2") {
+              potential.links[j, "correct_az_2"] <- 1
+            }
+          }
+        } else if (direction == "West") {
+          if (azimuth > 270 + az.adj - az.tol &
+              azimuth < 270 + az.adj + az.tol) {
+            if (k == "direction_1") {
+              potential.links[j, "correct_az_1"] <- 1
+            } else if (k == "direction_2") {
+              potential.links[j, "correct_az_2"] <- 1
+            }
+          }
+        }
+        
+        # filter to links where az is correct
+        if (k == "direction_1") {
+          potential.links.az <- potential.links %>%
+            filter(correct_az_1 == 1)
+        } else if (k == "direction_2") {
+          potential.links.az <- potential.links %>%
+            filter(correct_az_2 == 1)
+        }
+        
+        # find filtered link closest to the sensor (st_nearest_feature returns the index)
+        sensor <- locationTable[i, ]
+        closest.link <- potential.links.az[st_nearest_feature(sensor, potential.links.az), ]
+        
+        # complete link_row, from_id and to_id for each direction
+        if (k == "direction_1") {
+          locationTable[i, "link_row_1"] <- closest.link$link_id
+          locationTable[i, "from_id_1"] <- closest.link$from_id
+          locationTable[i, "to_id_1"] <- closest.link$to_id
+        } else if (k == "direction_2") {
+          locationTable[i, "link_row_2"] <- closest.link$link_id
+          locationTable[i, "from_id_2"] <- closest.link$from_id
+          locationTable[i, "to_id_2"] <- closest.link$to_id
+        }
+        
+        # restore sf class to locationTable (previous rows drop it)
+        locationTable <- locationTable %>% st_as_sf(.)
+      }
+    }
+  }
+  
+  # convert locationTable to data needed for join
+  locationTable <- locationTable %>%
+    dplyr::select(sensor_id, 
+                  link_row_1, from_id_1, to_id_1,
+                  link_row_2, from_id_2, to_id_2) %>%
+    st_drop_geometry
+  
+  # read in walkData
+  walkData <- st_read(walkData, layer = layer, quiet=T)
+  
+  # join link data to walkData
+  walkData <- walkData %>%
+    left_join(locationTable, by = "sensor_id")
+  
+  return(walkData)
+}
 
 
 
