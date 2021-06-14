@@ -1,6 +1,6 @@
 ---
 title: "observation-preparation"
-author: "jafshin"
+author: "jafshin & StevePem"
 date: "14/05/2021"
 output: html_document
 ---
@@ -47,7 +47,8 @@ col_spec <- cols(
 )
 
 # carData <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/car/TYPICAL_HOURLY_VOLUME_DATA.csv", col_types = col_spec)
-carData <- read_csv("./data/observations/car/TYPICAL_HOURLY_VOLUME_DATA.csv", col_types = col_spec)
+carData <- read_csv("./data/observations/car/TYPICAL_HOURLY_VOLUME_DATA.csv", 
+                    col_types = col_spec)
 
 carDataFiltered <- carData %>% 
   filter(PERIOD_TYPE=="SCHOOL TERM/NORMAL") %>% 
@@ -58,7 +59,6 @@ carDataFiltered <- carData %>%
   dplyr::select(-DOW) %>% 
   mutate(totalVol=rowSums(across(where(is.numeric)))) 
 
-# carDataFilter %>% distinct(HMGNS_FLOW_ID) %>% arrange(HMGNS_FLOW_ID)
 ```
 
 Reading Greater Melbourne Boundaries for mapping:
@@ -75,25 +75,16 @@ Adding geometry to the roads
 
 ```{r}
 # TIS_ROUTE_FLOW=	Traffic Information Route Flow (1=Generally out of Melb, Generally 0= into Melb)
-# 
-
 # HMGNS_FLOW_ID	Text	10	Homogeneous flow id eg 1234. An internal reference for Homogenous Flow. Homogeneous flow - The traffic volume information associated with the traffic flow along a link that is representative of all travel along the whole link
-
 # ROAD_NBR	Number	8	ROAD_NUMBER
 
 # htvnData <- st_read("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/car/homogenous_traffic_flow-shp/3ad2d9d5-dd49-40bf-86c4-ccf114d2e4582020328-1-cs85vw.3kgy7.shp") %>% 
 htvnData <- st_read("./data/observations/car/homogenous_traffic_flow-shp/3ad2d9d5-dd49-40bf-86c4-ccf114d2e4582020328-1-cs85vw.3kgy7.shp") %>% 
   st_transform(28355) %>% 
   mutate(HMGNS_FLOW_ID=as.character(HMGNS_FLOW))
-
-# glimpse(htvnData)
-
-# htvnData %>% distinct(HMGNS_FLOW) %>% arrange(HMGNS_FLOW)
-
 carDataJoined <- carDataFiltered %>%
   left_join(htvnData, by="HMGNS_FLOW_ID") %>% 
   st_as_sf()
-
 st_write(carDataJoined, "carDataJoined.sqlite", delete_dsn = T)
 ```
 
@@ -167,15 +158,12 @@ pmHighVolRoads <- pmCarData %>%
   group_by(ROAD_NBR) %>% 
   summarise(roadVol=mean(totalVol)) %>% 
   slice_max(order_by = roadVol, prop=0.1)
-
 pmHighVolCarData <- pmCarData %>% 
   filter(ROAD_NBR %in% pmHighVolRoads$ROAD_NBR) %>% 
   group_by(ROAD_NBR) %>% 
   slice_max(order_by = totalVol, n=1)
-
 st_write(pmHighVolCarData, "pmHighVolCarData.sqlite", delete_dsn = T)
 ```
-
 
 Plot of AM Peak Count locations
 
@@ -185,7 +173,6 @@ pmHighVolCarData %>%
   annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) +
   geom_sf(aes(fill=totalVol)) +
   scale_fill_viridis_c(trans = "sqrt", alpha = .8) 
-
 ```
 
 ### Adding links from MATSim Network
@@ -194,14 +181,10 @@ Add to AM peak data
 
 ```{r}
 
-amHighVolCarData <- addCarLinks(carData = "./amHighVolCarData.sqlite", layer = "amhighvolcardata")
+amHighVolCarData <- addCarLinks(carData = "./amHighVolCarData.sqlite", 
+                                layer = "amhighvolcardata")
 st_write(amHighVolCarData, "amHighVolCarData.sqlite", delete_dsn = T)
-
 glimpse(amHighVolCarData)
-
-# ggplot() + 
-#   annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) + 
-#   geom_sf(data = amHighVolCarData, colour = 'red') 
 
 ```
 
@@ -211,32 +194,22 @@ Notes:
 - Road 23, METROPOLITAN RING ROAD btwn METROPOLITAN RING ROAD Offramp & WESTERN RING ROAD, may wrongly select an offramp instead of a section of the Ring Road
 
 ```{r}
-pmHighVolCarData <- addCarLinks(carData = "./pmHighVolCarData.sqlite", layer = "pmhighvolcardata")
+pmHighVolCarData <- addCarLinks(carData = "./pmHighVolCarData.sqlite", 
+                                layer = "pmhighvolcardata")
 st_write(pmHighVolCarData, "pmHighVolCarData.sqlite", delete_dsn = T)
-
 glimpse(pmHighVolCarData)
 
-# ggplot() + 
-#   annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) + 
-#   geom_sf(data = pmHighVolCarData, colour = 'red') 
-
 ```
-
-
 
 ## Bicycle traffic simulation
 
 Reading the input files
 
 ```{r}
-
 # paths <- dir_ls("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/bicycle/2018-03/",glob = "*.zip" )
 paths <- dir_ls("./data/observations/bicycle/2018-03/",glob = "*.zip" )
-
-
 # Extracting all the bike count data
 walk(paths, ~unzip(.x, exdir = "data/cyclingVolFiles"))
-
 # reading the data it
 cyclingVol_paths <- dir_ls("./data/cyclingVolFiles/")
 col_spec <- cols(
@@ -258,7 +231,6 @@ col_spec <- cols(
   VEHICLE = col_character(),
   DIRECTION = col_character()
 )
-
 cyclingVol <- map_dfr(cyclingVol_paths, ~ read_csv(.x, col_types = col_spec))
 ```
 
@@ -276,9 +248,7 @@ cyclingVolFiltered <- cyclingVol %>%
   mutate(DATE=dmy(DATE)) %>% 
   mutate(DOW = wday(DATE, label=TRUE)) %>% 
   filter(DOW%in%c("Tue", "Wed", "Thu")) # Selecting mid-week days
-  
 ```
-
 
 Counting cycling trips based on counter location, direction, date and hour of the day
 
@@ -288,9 +258,7 @@ cyclingVolCounted <- cyclingVolFiltered %>%
   group_by(SITE_XN_ROUTE, LOC_LEG, DIRECTION, DATE, hour) %>% 
   summarise(count=n()) %>% 
   ungroup()
-
 glimpse(cyclingVolCounted)
-
 ```
 
 Aggregating count data by averaging over all days
@@ -303,36 +271,29 @@ cyclingVolAverage <- cyclingVolCounted %>%
   mutate(siteNumber=as.character(SITE_XN_ROUTE)) %>% 
   mutate(directionID=as.character(LOC_LEG)) %>% 
   dplyr::select(siteNumber, directionID, dir=DIRECTION, hour, count=avgCount) 
-
 glimpse(cyclingVolAverage)
-
 ```
 
 ### Having a look at the final data 
 
 ```{r}
-
 cyclingVolAverage %>% count(siteNumber, directionID, dir) %>% 
   ggplot(aes(x=dir, y=n))+
   geom_col(aes(fill=dir))
-
 ```
 
 Plotting one of the count locations
 
 ```{r}
-
 cyclingVolAverage %>% filter(siteNumber==6411) %>% 
   ggplot(aes(x=hour, y=count)) +
   geom_point(aes(color=dir)) +
   geom_line(aes(color=dir))
-  
 ```
 
 Plotting aggregated values 
 
 ```{r}
-
 cyclingVolAverage %>% 
   group_by(hour, siteNumber) %>% 
   summarise(routeVol=sum(count)) %>%
@@ -340,7 +301,6 @@ cyclingVolAverage %>%
   ggplot(aes(x=hour, y=totalVol)) +
   geom_point() +
   geom_line()
-
 ```
 
 ### Adding coordinates to the count points
@@ -348,13 +308,10 @@ cyclingVolAverage %>%
 Reading the location points
 
 ```{r}
-
 # cycleCountersMeta <- read_xlsx("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/bicycle/VicRoads_Bike_Site_Number_Listing.xlsx",
 cycleCountersMeta <- read_xlsx("./data/observations/bicycle/VicRoads_Bike_Site_Number_Listing.xlsx",
           skip=2, col_names=c("id", "site", "gps", "desc", "comment")) 
-
 cycleCountersMeta %>% glimpse()
-
 ```
 
 Adding the location points and MATSim network links to the count data
@@ -367,9 +324,7 @@ Notes:
 ```{r}
 cyclingVolCoordinated <- addBikeLinks(cyclingVolAverage = cyclingVolAverage,
                          cycleCountersMeta = cycleCountersMeta)
-
 st_write(cyclingVolCoordinated, "cyclingVolCoordinated.sqlite", delete_layer=T)
-
 cyclingVolCoordinated %>% glimpse()
 ```
 
@@ -403,11 +358,8 @@ col_spec <- cols(
   Sensor_Name = col_character(),
   Hourly_Counts = col_double()
 )
-
-
 # walkData <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Monthly__counts_per_hour_.csv", col_types = col_spec) 
 walkData <- read_csv("./data/observations/walk/Pedestrian_Counting_System_-_Monthly__counts_per_hour_.csv", col_types = col_spec) 
-
 walkData %>% glimpse()
 ```
 
@@ -415,7 +367,6 @@ walkData %>% glimpse()
 walkDataFiltered <- walkData %>% 
   filter(Year==2018,Month=="March") %>% 
   filter(Day%in%c("Tuesday", "Wednesday", "Thursday"))
-
 walkDataFiltered %>% count(Year,Month,Day)
 ```
 
@@ -423,15 +374,12 @@ walkDataFiltered %>% count(Year,Month,Day)
 walkDataFiltered %>% glimpse()
 ```
 
-
-Adding location to the count data
-
+### Adding location to the count data
 
 Source for sensor locations:
 https://data.melbourne.vic.gov.au/Transport/Pedestrian-Counting-System-Sensor-Locations/h57g-5234
 
 ```{r}
-
 col_spec <- cols(
   sensor_id = col_double(),
   sensor_description = col_character(),
@@ -445,17 +393,14 @@ col_spec <- cols(
   longitude = col_double(),
   location = col_character()
 )
-
 # walkSensorLocs <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Sensor_Locations.csv", col_types = col_spec)
 walkSensorLocs <- read_csv("./data/observations/walk/Pedestrian_Counting_System_-_Sensor_Locations.csv", col_types = col_spec)
-
 walkSensorLocs %>% glimpse()
 ```
 
 ```{r}
 walkDataJoined <- walkDataFiltered %>% 
   left_join(walkSensorLocs, by=c("Sensor_ID"="sensor_id")) 
-
 walkDataJoined %>% glimpse()
 ```
 
@@ -464,14 +409,14 @@ walkDataJoined %>% glimpse()
 walkDataCoordinated <- walkDataJoined %>% 
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>% 
   st_transform(28355) %>% 
-  dplyr::select(ID,Sensor_ID, Sensor_Name, Hourly_Counts, direction_1, direction_2, Time, geometry)
-
+  dplyr::select(ID,Sensor_ID, Sensor_Name, Hourly_Counts, direction_1, 
+                direction_2, Time, geometry)
 st_write(walkDataCoordinated, "walkDataCoordinated.sqlite", delete_layer=T)
-
 walkDataCoordinated %>% glimpse()
 ```
 
 Mapping walking count point locations
+
 ```{r}
 walkDataCoordinated %>% 
   group_by(Sensor_ID) %>% 
@@ -523,8 +468,6 @@ st_write(walkDataCoordinated, "walkDataCoordinated.sqlite", delete_dsn = T)
 walkDataCoordinated %>% glimpse()
 
 ```
-
-
 
 ## Public transport
 
@@ -596,7 +539,6 @@ stationDataWithGeom <- stationDataCoordinated %>%
 
 ```
 
-
 Map of the train stops included for the calibration: 
 
 ```{r}
@@ -612,7 +554,6 @@ stationDataWithGeom %>%
 ```{r}
 st_write(stationDataWithGeom, "stationDataWithGeom.sqlite", delete_dsn = T)
 ```
-
 
 ### Adding nodes from MATSim Network
 
@@ -651,7 +592,6 @@ no.vertices <- length(vertices)
 no.vertices  # should be 216 (218 stations in patronage data, excl. Showgrounds and Flemington Racecourse)
 
 ```
-
 
 
 #### Other potential sources for pt data: 
