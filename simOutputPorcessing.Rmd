@@ -1,0 +1,139 @@
+---
+title: "simulationOutputPorcessing"
+author: "jafshin"
+date: "15/06/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(fs)
+```
+
+## Converting event.xml output to CSVs
+
+```{r}
+paths <- dir_ls("./data/simOutput/",glob = "*.txt" )
+if (length(paths)>0) {
+  walk(paths, ~file.remove(.x))
+}
+```
+
+```{bash}
+
+#!/bin/bash
+if [[ $# -eq 0 ]]; then
+  events_file=./data/simOutput/output_events.xml.gz;
+else
+  events_file=$1
+fi
+
+# Departure and Arrival
+zcat $events_file | tail -n +3 | head -n -2 |
+grep "departure\|arrival" |
+cut -d "\"" -f 2,4,6,8,10 |
+sed -e "s/\"/,/g"|
+sed -e '1i\'$'\n''time,type,person,link,legMode' | cat > ./data/simOutput/person_trip.txt
+
+# left link and entered link
+zcat $events_file | tail -n +3 | head -n -2 |
+grep "left link\|entered link" |
+sed -e "s/left link/left_link/g; s/entered link/entered_link/g " |
+cut -d "\"" -f 2,4,6,8 |
+sed -e "s/\"/,/g"|
+sed -e '1i\'$'\n''time,type,link,vehicle' | cat > ./data/simOutput/trip_links.txt
+
+# vehicle-traffic interaction
+zcat $events_file | tail -n +3 | head -n -2 |
+grep "vehicle leaves traffic\|vehicle enters traffic" |
+sed -e "s/vehicle leaves traffic/vehicle_leaves_traffic/g;" |
+sed -e "s/vehicle enters traffic/vehicle_enters_traffic/g;" |
+cut -d "\"" -f 2,4,6,8,10,12 |
+sed -e "s/\"/,/g"|
+sed -e '1i\'$'\n''time,type,person,link,vehicle,networkMode' | cat > ./data/simOutput/vehicle_trip.txt
+
+# Activity-startend actstart
+zcat  $events_file | tail -n +3 | head -n -2 |
+grep "actstart\|actend" |
+cut -d "\"" -f 2,4,6,8,10 |
+sed -e "s/\"/,/g"|
+sed -e '1i\'$'\n''time,type,person,link,actType' | cat > ./data/simOutput/person_act.txt
+
+```
+
+## link volume analysis
+
+```{r}
+
+tripLinks <- read_csv("./data/simOutput/trip_links.txt") 
+tripLinksSampled <- tripLinks %>% slice_head(prop=0.01) 
+
+```
+
+Adding mode type to the trips
+
+```{r}
+vehicleTrips <- read_csv("./data/simOutput/vehicle_trip.txt")
+
+vehicleLists <- vehicleTrips %>% 
+  distinct(person,vehicle,networkMode) 
+
+tripLinksWithVehicle <- tripLinksSampled %>% 
+  left_join(vehicleLists, by = "vehicle") %>% 
+  # Filtering to non-pt vehicles 
+  filter(!(grepl("bus", vehicle) | grepl("train", vehicle) | grepl("tram", vehicle)))
+tripLinksWithVehicle %>% count(networkMode)
+
+tripLinksWithID <- rbind({tripLinksWithVehicle %>% filter(type=="entered_link") %>% mutate(id=row_number())},
+                         {tripLinksWithVehicle %>% filter(type=="left_link") %>% mutate(id=row_number())})
+                         
+
+tripLinksWide <- pivot_wider(tripLinksWithID, id_cols = c(link, networkMode, vehicle, person), 
+                   names_from = type, 
+                   values_from = time)
+  
+```
+
+Error in building trips (%):
+
+```{r}
+
+tripLinksFiltered <- tripLinksWide %>% 
+  filter(left_link!="NULL" & entered_link!="NULL")  %>% 
+  rowwise() %>% 
+  filter(length(left_link[])==1 & length(entered_link[])==1) %>%  
+  mutate(enteredTime=unlist(entered_link)) %>% 
+  mutate(leftTime=unlist(left_link)) %>% 
+  dplyr::select(-left_link, -entered_link)
+   
+(nrow(tripLinksWide)-nrow(tripLinksFiltered))*100/nrow(tripLinksWide)
+
+```
+
+```{r}
+
+tripLinksWithTime <- tripLinksFiltered %>% 
+  mutate(enterHour= sprintf("%02d", floor(enteredTime / 3600))) %>% 
+  mutate(leftHour= sprintf("%02d", floor(leftTime / 3600))) %>% 
+  mutate(enterHMS=paste(enterHour,
+                        sprintf("%02d", floor(enteredTime %% 3600 / 60)),
+                        sprintf("%02d", floor(enteredTime %% 60 )),
+                        sep=":")) %>% 
+  mutate(leftHMS=paste(leftHour,
+                        sprintf("%02d", floor(leftTime %% 3600 / 60)),
+                        sprintf("%02d", floor(leftTime %% 60 )),
+                        sep=":"))
+
+```
+
+## Aggregating trips to the link level
+
+```{r}
+
+tripLinksWithTime %>% filter(enterHour!=leftHour)
+
+```
+
+
+
