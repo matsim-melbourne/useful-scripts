@@ -5,22 +5,31 @@ date: "15/06/2021"
 output: html_document
 ---
 
+## Simulation output post-processing for Calibration/validation
+
+This code converts MATSim's event file into four different CSV files, each capturing certain types of events.
+Then it processes the link enter/exit events to figure out traffic volume by hour for each link of the network.
+Next, it reads MATSim's XML output network and converts it to SF objects and then adds traffic volume to each network link to be used for calibration/validation.
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(ggplot2)
+library(ggspatial)
 library(fs)
+source("./functions/convertXMLNetwork.R")
 ```
 
-## Converting event.xml output to CSVs
+### Converting event.xml output to CSVs
 
-```{r}
+```{r cleaning old files, eval=FALSE}
 paths <- dir_ls("./data/simOutput/",glob = "*.txt" )
 if (length(paths)>0) {
   walk(paths, ~file.remove(.x))
 }
 ```
 
-```{bash}
+```{bash processing event XMLs, eval=FALSE}
 
 #!/bin/bash
 if [[ $# -eq 0 ]]; then
@@ -62,18 +71,18 @@ sed -e '1i\'$'\n''time,type,person,link,actType' | cat > ./data/simOutput/person
 
 ```
 
-## link volume analysis
+### link volume analysis
 
-```{r}
+```{r reading trip link events}
 
 tripLinks <- read_csv("./data/simOutput/trip_links.txt") 
-tripLinksSampled <- tripLinks %>% slice_head(prop=0.01) 
+tripLinksSampled <- tripLinks %>% slice_sample(prop=0.1) 
 
 ```
 
 Adding mode type to the trips
 
-```{r}
+```{r adding mode to link events}
 vehicleTrips <- read_csv("./data/simOutput/vehicle_trip.txt")
 
 vehicleLists <- vehicleTrips %>% 
@@ -97,7 +106,7 @@ tripLinksWide <- pivot_wider(tripLinksWithID, id_cols = c(link, networkMode, veh
 
 Error in building trips (%):
 
-```{r}
+```{r checking how many we miss to match}
 
 tripLinksFiltered <- tripLinksWide %>% 
   filter(left_link!="NULL" & entered_link!="NULL")  %>% 
@@ -111,29 +120,89 @@ tripLinksFiltered <- tripLinksWide %>%
 
 ```
 
-```{r}
+```{r converting time}
 
 tripLinksWithTime <- tripLinksFiltered %>% 
-  mutate(enterHour= sprintf("%02d", floor(enteredTime / 3600))) %>% 
-  mutate(leftHour= sprintf("%02d", floor(leftTime / 3600))) %>% 
-  mutate(enterHMS=paste(enterHour,
+  mutate(enterHour=  floor(enteredTime / 3600)) %>% 
+  mutate(leftHour=  floor(leftTime / 3600)) %>% 
+  mutate(enterHMS=paste(sprintf("%02d",enterHour),
                         sprintf("%02d", floor(enteredTime %% 3600 / 60)),
                         sprintf("%02d", floor(enteredTime %% 60 )),
                         sep=":")) %>% 
-  mutate(leftHMS=paste(leftHour,
+  mutate(leftHMS=paste(sprintf("%02d",leftHour),
                         sprintf("%02d", floor(leftTime %% 3600 / 60)),
                         sprintf("%02d", floor(leftTime %% 60 )),
                         sep=":"))
 
 ```
 
-## Aggregating trips to the link level
+#### Aggregating exiting link event by the hour of the day
 
-```{r}
+```{r plotting link exit events}
 
-tripLinksWithTime %>% filter(enterHour!=leftHour)
+tripLinksWithTime %>% 
+  group_by(leftHour) %>% 
+  summarise(n=n()) %>% 
+  ggplot(aes(x=leftHour, y=n)) +
+  geom_col() +
+  labs(title = "Aggregated exiting link event count by the hour of the day") +
+  xlab("Hour of the day") +
+  ylab("Link exit even count")
+
+```
+
+#### Aggregating entering link event by the hour of the day
+
+```{r plotting link enter events}
+
+tripLinksWithTime %>% 
+  group_by(enterHour) %>% 
+  summarise(n=n()) %>% 
+  ggplot(aes(x=enterHour, y=n)) +
+  geom_col() +
+  labs(title = "Aggregated entering link event count by the hour of the day") +
+  xlab("Hour of the day") +
+  ylab("Link enter even count")
 
 ```
 
 
+## Network level analysis
 
+```{r processing network XML}
+networkConverted <- convertXMLNetowrk(xmlFile = "./data/simOutput/output_network.xml",
+                                      netCRS = 28355)
+
+networkLinks <- networkConverted[[2]]
+```
+
+### Road network with Daily traffic volume
+
+Joining daily data to road network
+
+```{r joining daily volumes to network}
+
+tripLinkAggregatedDaily <- tripLinksWithTime %>% 
+  mutate(id=as.character(link)) %>% 
+  group_by(id) %>% 
+  summarise(total_vol=n())
+
+networkLinksWithDailyVol <- networkLinks %>% left_join(tripLinkAggregatedDaily, by = "id")   
+st_write(networkLinksWithDailyVol, "networkLinksWithDailyVol.sqlite", delete_layer = T)
+```
+
+plotting daily volume
+
+```{r plotting daily volumes on network}
+
+# networkLinksWithDailyVol$total_vol <- st_read("networkLinksWithDailyVol.sqlite")
+
+networkLinksWithDailyVol %>% 
+  drop_na(total_vol) %>% 
+  # filter(total_vol>10) %>% 
+  ggplot() +
+  # annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) +
+  geom_sf(aes(fill=total_vol)) +
+  scale_fill_viridis_c(trans = "sqrt", alpha = .8) 
+
+```
