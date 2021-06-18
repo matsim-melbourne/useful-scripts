@@ -23,6 +23,18 @@ source('./functions/addNetworkDetails.R')
 
 ```
 
+```{r road network data}
+
+networkFile <- "./data/networks/MATSimMelbNetwork.sqlite"
+
+# read in links and nodes
+networkLinks <- st_read(networkFile, layer = "links", quiet=T) %>%
+  mutate(link_id = row_number()) 
+  
+networkNodes <- st_read(networkFile, layer = "nodes", quiet=T) 
+
+```
+
 ## Car traffic data
 
 ### Car traffic data cleaning 
@@ -182,7 +194,9 @@ Add to AM peak data
 ```{r}
 
 amHighVolCarData <- addCarLinks(carData = "./amHighVolCarData.sqlite", 
-                                layer = "amhighvolcardata")
+                                layer = "amhighvolcardata",
+                                links= networkLinks,
+                                nodes= networkNodes)
 st_write(amHighVolCarData, "amHighVolCarData.sqlite", delete_dsn = T)
 glimpse(amHighVolCarData)
 
@@ -195,7 +209,9 @@ Notes:
 
 ```{r}
 pmHighVolCarData <- addCarLinks(carData = "./pmHighVolCarData.sqlite", 
-                                layer = "pmhighvolcardata")
+                                layer = "pmhighvolcardata",
+                                links= networkLinks,
+                                nodes= networkNodes)
 st_write(pmHighVolCarData, "pmHighVolCarData.sqlite", delete_dsn = T)
 glimpse(pmHighVolCarData)
 
@@ -323,7 +339,9 @@ Notes:
 
 ```{r}
 cyclingVolCoordinated <- addBikeLinks(cyclingVolAverage = cyclingVolAverage,
-                         cycleCountersMeta = cycleCountersMeta)
+                                      cycleCountersMeta = cycleCountersMeta,
+                                      networkLinks,
+                                      networkNodes)
 st_write(cyclingVolCoordinated, "cyclingVolCoordinated.sqlite", delete_layer=T)
 cyclingVolCoordinated %>% glimpse()
 ```
@@ -461,7 +479,9 @@ Sensors 77 and 78 (Harbour Esplanade pedestrian path and bike path) both select 
 ```{r}
 walkDataCoordinated <- addWalkLinks(walkData = "./walkDataCoordinated.sqlite", 
                                     layer = "walkdatacoordinated",
-                                    walkSensorLocs = walkSensorLocs)
+                                    walkSensorLocs = walkSensorLocs,
+                                    networkLinks,
+                                    networkNodes)
 
 st_write(walkDataCoordinated, "walkDataCoordinated.sqlite", delete_dsn = T)
 
@@ -561,14 +581,16 @@ Add station nodes
 
 ```{r}
 stationDataWithGeom <- addStationNodes(patronageData = "./stationDataWithGeom.sqlite", 
-                                       layer = "stationdatawithgeom")
+                                       layer = "stationdatawithgeom",
+                                       networkLinks,
+                                       networkNodes)
 st_write(stationDataWithGeom, "stationDataWithGeom.sqlite", delete_dsn = T)
 
 
 # Check that result is a connected network (except for Showgrounds and Flemington Racecourse)
 # Note that there are also  other links for express services
 # Note link gap between Highett and Cheltenham, because Southland station missing from patronage data
-rail.lines <- st_read("./generatedNetworks/MATSimMelbNetwork.sqlite", layer = "links", quiet=T) %>%
+rail.lines <- networkLinks %>%
   filter(from_id %in% stationDataWithGeom$node_id & to_id %in% stationDataWithGeom$node_id)
 
 ggplot() + 
