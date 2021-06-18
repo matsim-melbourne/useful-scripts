@@ -25,15 +25,23 @@ source('./functions/addNetworkDetails.R')
 
 ```{r road network data}
 
-networkFile <- "./data/networks/MATSimMelbNetwork.sqlite"
 
-# read in links and nodes
-networkLinks <- st_read(networkFile, layer = "links", quiet=T) %>%
-  mutate(link_id = row_number()) 
-  
-networkNodes <- st_read(networkFile, layer = "nodes", quiet=T) 
+if (file.exists("./data/networks/networkConverted.sqlite")) {
+  networkLinks <- st_read("./data/networks/networkConverted.sqlite", 
+                          layer = "links", quiet=T) %>% 
+    rename(link_id=id)
+  networkNodes <- st_read("./data/networks/networkConverted.sqlite", 
+                          layer = "nodes", quiet=T) 
+}else{
+  networkConverted <- convertXMLNetowrk(xmlFile = "./data/simOutput/output_network.xml",
+                                        netCRS = 28355)
+  networkNodes <- networkConverted[[1]]
+  networkLinks <- networkConverted[[2]] %>% 
+    rename(link_id=id)
+}
 
 ```
+
 
 ## Car traffic data
 
@@ -498,7 +506,8 @@ Reading stations' patronage survey data
 ```{r}
 
 # stationData <- readxl::read_excel("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/pt/2016 Station Access Mode.xlsx",sheet = "Sheet2", skip = 3)  
-stationData <- readxl::read_excel("./data/observations/pt/2016 Station Access Mode.xlsx",sheet = "Sheet2", skip = 3)  
+stationData <- readxl::read_excel("./data/observations/pt/2016 Station Access Mode.xlsx",
+                                  sheet = "Sheet2", skip = 3)  
 
   
 stationDataFiltered <- stationData %>%   

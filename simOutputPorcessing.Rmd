@@ -170,10 +170,16 @@ tripLinksWithTime %>%
 ## Network level analysis
 
 ```{r processing network XML}
-networkConverted <- convertXMLNetowrk(xmlFile = "./data/simOutput/output_network.xml",
-                                      netCRS = 28355)
 
-networkLinks <- networkConverted[[2]]
+if (file.exists("./data/networks/networkConverted.sqlite")) {
+  networkLinks <- st_read("./data/networks/networkConverted.sqlite", 
+                          layer = "links", quiet=T)
+}else{
+  networkConverted <- convertXMLNetowrk(xmlFile = "./data/simOutput/output_network.xml",
+                                        netCRS = 28355)
+  networkLinks <- networkConverted[[2]]
+}
+
 ```
 
 ### Road network with Daily traffic volume
