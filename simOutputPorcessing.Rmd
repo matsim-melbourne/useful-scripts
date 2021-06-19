@@ -17,6 +17,7 @@ library(tidyverse)
 library(ggplot2)
 library(ggspatial)
 library(sf)
+library(vroom)
 library(fs)
 source("./functions/convertXMLNetwork.R")
 ```
@@ -77,6 +78,7 @@ sed -e '1i\'$'\n''time,type,person,link,actType' | cat > ./data/simOutput/person
 ```{r reading trip link events}
 
 tripLinks <- read_csv("./data/simOutput/trip_links.txt") 
+tripLinks <- vro("./data/simOutput/trip_links.txt") 
 tripLinksSampled <- tripLinks %>% slice_sample(prop=0.1) 
 
 ```
@@ -95,6 +97,13 @@ tripLinksWithVehicle <- tripLinksSampled %>%
   filter(!(grepl("bus", vehicle) | grepl("train", vehicle) | grepl("tram", vehicle)))
 tripLinksWithVehicle %>% count(networkMode)
 
+
+
+```
+
+We can either try to join to get the duration on each link, however, it will result in missing many:
+
+```{r, eval=FALSE}
 tripLinksWithID <- rbind({tripLinksWithVehicle %>% filter(type=="entered_link") %>% mutate(id=row_number())},
                          {tripLinksWithVehicle %>% filter(type=="left_link") %>% mutate(id=row_number())})
                          
@@ -103,6 +112,13 @@ tripLinksWide <- pivot_wider(tripLinksWithID, id_cols = c(link, networkMode, veh
                    names_from = type, 
                    values_from = time)
   
+```
+
+Instead we only consider link exit event as our messure for count:
+
+```{r}
+
+
 ```
 
 Error in building trips (%):
