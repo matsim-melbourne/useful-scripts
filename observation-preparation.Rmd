@@ -20,16 +20,22 @@ library(igraph)
 library(nngeo)  # for st_azimuth
 
 source('./functions/addNetworkDetails.R')
+source('./functions/convertXMLNetwork.R')
+source('./functions/prepareCarData.R')
 
 ```
 
 ```{r road network data}
 
+gMelbBoundary <- st_read("./data/boundaries/GreaterMelbourneArea/GMEL_SA4_2016_Polygons.sqlite")  %>% 
+  st_transform(28355) %>%
+  summarise() 
 
 if (file.exists("./data/networks/networkConverted.sqlite")) {
   networkLinks <- st_read("./data/networks/networkConverted.sqlite", 
                           layer = "links", quiet=T) %>% 
-    rename(link_id=id)
+    rename(link_id=id, from_id=from, to_id=to, highway=type) %>%  
+    mutate(is_oneway=1)
   networkNodes <- st_read("./data/networks/networkConverted.sqlite", 
                           layer = "nodes", quiet=T) 
 }else{
@@ -37,11 +43,11 @@ if (file.exists("./data/networks/networkConverted.sqlite")) {
                                         netCRS = 28355)
   networkNodes <- networkConverted[[1]]
   networkLinks <- networkConverted[[2]] %>% 
-    rename(link_id=id)
+    rename(link_id=id, from_id=from, to_id=to, highway=type) %>%  
+    mutate(is_oneway=1)
 }
 
 ```
-
 
 ## Car traffic data
 
@@ -50,76 +56,20 @@ if (file.exists("./data/networks/networkConverted.sqlite")) {
 Reading input 
 
 ```{r}
-###############################################################################
-# Day of Week where 1=Monday, 2=Tuesday,3=Wednesday,                          #
-# 4=Thursday,5=Friday,6=Saturday and 7=Sunday                                 #
-###############################################################################
-# A=Actual count, Ehis=Estimate based on historic data,                       #
-# Egmr=Estimate based on global substitution, Erte=Estimate based on route    #
-###############################################################################
 
-col_spec <- cols(
-  .default = col_double(),
-  HMGNS_LNK_DESC = col_character(),
-  FLOW = col_character(),
-  COUNT_TYPE = col_character(),
-  PERIOD_TYPE = col_character()
-)
+if (file.exists("./data/observations/car/carDataCroped.sqlite")) {
+  carDataCroped <- st_read("./data/observations/car/carDataCroped.sqlite", 
+                           quiet=T)
+}else{
+  prepareCarData(carDataFile="./data/observations/car/TYPICAL_HOURLY_VOLUME_DATA.csv",
+                 htvnDataFile="./data/observations/car/homogenous_traffic_flow-shp/3ad2d9d5-dd49-40bf-86c4-ccf114d2e4582020328-1-cs85vw.3kgy7.shp",
+                 gMelbBoundary)
+  carDataCroped <- st_read("./data/observations/car/carDataCroped.sqlite", 
+                           quiet=T)
+  }
 
-# carData <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/car/TYPICAL_HOURLY_VOLUME_DATA.csv", col_types = col_spec)
-carData <- read_csv("./data/observations/car/TYPICAL_HOURLY_VOLUME_DATA.csv", 
-                    col_types = col_spec)
 
-carDataFiltered <- carData %>% 
-  filter(PERIOD_TYPE=="SCHOOL TERM/NORMAL") %>% 
-  filter(DOW==3) %>% 
-  # Filter to those with high enough number traffic
-  mutate(HMGNS_FLOW_ID=as.character(HMGNS_FLOW_ID)) %>% 
-  mutate(HMGNS_LNK_ID=as.character(HMGNS_LNK_ID)) %>% 
-  dplyr::select(-DOW) %>% 
-  mutate(totalVol=rowSums(across(where(is.numeric)))) 
 
-```
-
-Reading Greater Melbourne Boundaries for mapping:
-
-```{r}
-# GMelbBoundary <- read_sf("~/ownCloud/io.github.jafshin/calibration-validation/data/boundaries/ABS_Boundaries/1270055001_sa1_2016_aust_shape/SA1_2016_AUST.shp") %>% 
-GMelbBoundary <- read_sf("./data/boundaries/1270055001_sa1_2016_aust_shape/SA1_2016_AUST.shp") %>% 
-  st_transform(28355) %>% 
-  filter(GCC_NAME16=="Greater Melbourne") %>% 
-  summarise(geometry=st_union(geometry)) 
-```
-
-Adding geometry to the roads
-
-```{r}
-# TIS_ROUTE_FLOW=	Traffic Information Route Flow (1=Generally out of Melb, Generally 0= into Melb)
-# HMGNS_FLOW_ID	Text	10	Homogeneous flow id eg 1234. An internal reference for Homogenous Flow. Homogeneous flow - The traffic volume information associated with the traffic flow along a link that is representative of all travel along the whole link
-# ROAD_NBR	Number	8	ROAD_NUMBER
-
-# htvnData <- st_read("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/car/homogenous_traffic_flow-shp/3ad2d9d5-dd49-40bf-86c4-ccf114d2e4582020328-1-cs85vw.3kgy7.shp") %>% 
-htvnData <- st_read("./data/observations/car/homogenous_traffic_flow-shp/3ad2d9d5-dd49-40bf-86c4-ccf114d2e4582020328-1-cs85vw.3kgy7.shp") %>% 
-  st_transform(28355) %>% 
-  mutate(HMGNS_FLOW_ID=as.character(HMGNS_FLOW))
-carDataJoined <- carDataFiltered %>%
-  left_join(htvnData, by="HMGNS_FLOW_ID") %>% 
-  st_as_sf()
-st_write(carDataJoined, "carDataJoined.sqlite", delete_dsn = T)
-```
-
-Crop to greater Melbourne
-
-```{r}
-# gMelbBoundary <- st_read("~/ownCloud/Data/ABS_Boundaries/GreaterMelbourneArea/GMEL_SA4_2016_Polygons.sqlite")  %>% 
-gMelbBoundary <- st_read("./data/boundaries/GreaterMelbourneArea/GMEL_SA4_2016_Polygons.sqlite")  %>% 
-  st_transform(28355) %>%
-  summarise()  # to dissolve SA4s (without this, roads get split at SA4 boundaries)
-  
-carDataCroped <- carDataJoined %>% 
-  st_intersection(gMelbBoundary)
-
-st_write(carDataCroped, "carDataCropedSmall.sqlite", delete_dsn = T)
 ```
 
 ### AM Peak data
@@ -127,7 +77,7 @@ st_write(carDataCroped, "carDataCropedSmall.sqlite", delete_dsn = T)
 ```{r}
 
 amCarData <- carDataCroped %>% 
-  filter(TIS_ROUTE1==0)
+  filter(tis_route1==0)
 
 ```
 
@@ -137,35 +87,51 @@ finding high volume AM roads
 
 amHighVolRoads <- amCarData %>% 
   st_drop_geometry() %>% 
-  group_by(ROAD_NBR) %>% 
-  summarise(roadVol=mean(totalVol)) %>% 
-  slice_max(order_by = roadVol, prop=0.1)
+  group_by(road_nbr) %>% 
+  summarise(road_vol=mean(total_vol)) %>% 
+  slice_max(order_by = road_vol, prop=0.1)
 
 amHighVolCarData <- amCarData %>% 
-  filter(ROAD_NBR %in% amHighVolRoads$ROAD_NBR) %>% 
-  group_by(ROAD_NBR) %>% 
-  slice_max(order_by = totalVol, n=1)
+  filter(road_nbr %in% amHighVolRoads$road_nbr) %>% 
+  group_by(road_nbr) %>% 
+  slice_max(order_by = total_vol, n=1)
 
-st_write(amHighVolCarData, "amHighVolCarData.sqlite", delete_dsn = T)
+# st_write(amHighVolCarData, "./data/observationsJoined/amHighVolCarData.sqlite", delete_dsn = T)
 ```
 
 Plot of AM Peak Count locations
 
 ```{r}
 amHighVolCarData %>% 
-  ggplot() +
+  ggplot() + 
   annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) +
-  geom_sf(aes(fill=totalVol)) +
+  geom_sf(aes(fill=total_vol)) +
   scale_fill_viridis_c(trans = "sqrt", alpha = .8) 
 
 ```
+
+
+Add network link to AM peak data
+
+```{r}
+
+carAmObsJoined2Network <- addCarLinks(carData = amHighVolCarData,
+                                      links= networkLinks,
+                                      nodes= networkNodes)
+st_write(carAmObsJoined2Network, 
+         "./data/observationsJoined/carAmObsJoined2Network.sqlite", 
+         delete_dsn = T)
+glimpse(carAmObsJoined2Network)
+
+```
+
 
 ### PM Peak data
 
 ```{r}
 
 pmCarData <- carDataCroped %>% 
-  filter(TIS_ROUTE1==1)
+  filter(tis_route1==1)
 
 ```
 
@@ -175,53 +141,37 @@ finding high volume PM roads
 
 pmHighVolRoads <- pmCarData %>% 
   st_drop_geometry() %>% 
-  group_by(ROAD_NBR) %>% 
-  summarise(roadVol=mean(totalVol)) %>% 
-  slice_max(order_by = roadVol, prop=0.1)
+  group_by(road_nbr) %>% 
+  summarise(road_vol=mean(total_vol)) %>% 
+  slice_max(order_by = road_vol, prop=0.1)
 pmHighVolCarData <- pmCarData %>% 
-  filter(ROAD_NBR %in% pmHighVolRoads$ROAD_NBR) %>% 
-  group_by(ROAD_NBR) %>% 
-  slice_max(order_by = totalVol, n=1)
-st_write(pmHighVolCarData, "pmHighVolCarData.sqlite", delete_dsn = T)
+  filter(road_nbr %in% pmHighVolRoads$road_nbr) %>% 
+  group_by(road_nbr) %>% 
+  slice_max(order_by = total_vol, n=1)
+# st_write(pmHighVolCarData, "./data/observationsJoined/pmHighVolCarData.sqlite", delete_dsn = T)
 ```
 
-Plot of AM Peak Count locations
+Plot of PM Peak Count locations
 
 ```{r}
 pmHighVolCarData %>% 
   ggplot() +
   annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) +
-  geom_sf(aes(fill=totalVol)) +
+  geom_sf(aes(fill=total_vol)) +
   scale_fill_viridis_c(trans = "sqrt", alpha = .8) 
 ```
 
-### Adding links from MATSim Network
-
-Add to AM peak data
-
-```{r}
-
-amHighVolCarData <- addCarLinks(carData = "./amHighVolCarData.sqlite", 
-                                layer = "amhighvolcardata",
-                                links= networkLinks,
-                                nodes= networkNodes)
-st_write(amHighVolCarData, "amHighVolCarData.sqlite", delete_dsn = T)
-glimpse(amHighVolCarData)
-
-```
-
-Add to PM peak data
+Add network link  PM peak data
 
 Notes:
 - Road 23, METROPOLITAN RING ROAD btwn METROPOLITAN RING ROAD Offramp & WESTERN RING ROAD, may wrongly select an offramp instead of a section of the Ring Road
 
 ```{r}
-pmHighVolCarData <- addCarLinks(carData = "./pmHighVolCarData.sqlite", 
-                                layer = "pmhighvolcardata",
+carPmObsJoined2Network <- addCarLinks(carData = pmHighVolCarData, 
                                 links= networkLinks,
                                 nodes= networkNodes)
-st_write(pmHighVolCarData, "pmHighVolCarData.sqlite", delete_dsn = T)
-glimpse(pmHighVolCarData)
+st_write(carPmObsJoined2Network, "./data/observationsJoined/carPmObsJoined2Network.sqlite", delete_dsn = T)
+glimpse(carPmObsJoined2Network)
 
 ```
 
@@ -321,8 +271,8 @@ Plotting aggregated values
 cyclingVolAverage %>% 
   group_by(hour, siteNumber) %>% 
   summarise(routeVol=sum(count)) %>%
-  summarise(totalVol=mean(routeVol)) %>% 
-  ggplot(aes(x=hour, y=totalVol)) +
+  summarise(total_vol=mean(routeVol)) %>% 
+  ggplot(aes(x=hour, y=total_vol)) +
   geom_point() +
   geom_line()
 ```
@@ -346,155 +296,23 @@ Notes:
 
 
 ```{r}
-cyclingVolCoordinated <- addBikeLinks(cyclingVolAverage = cyclingVolAverage,
+cyclingObsJoined2Network <- addBikeLinks(cyclingVolAverage = cyclingVolAverage,
                                       cycleCountersMeta = cycleCountersMeta,
                                       networkLinks,
                                       networkNodes)
-st_write(cyclingVolCoordinated, "cyclingVolCoordinated.sqlite", delete_layer=T)
-cyclingVolCoordinated %>% glimpse()
+st_write(cyclingObsJoined2Network, "./data/observationsJoined/cyclingObsJoined2Network.sqlite", delete_layer=T)
+cyclingObsJoined2Network %>% glimpse()
 ```
 
 Mapping selected cycling count locations
 
 ```{r}
-cyclingVolCoordinated %>% 
+cyclingObsJoined2Network %>% 
   group_by(siteNumber,directionID) %>% 
-  summarise(totalVol=sum(count)) %>%  
+  summarise(total_vol=sum(count)) %>%  
   ggplot() +
   annotation_map_tile(type="osmgrayscale",zoom=10, alpha=0.8) +
-  geom_sf(aes(color=totalVol))  
-```
-
-## Walking Data
-
-Reading the walk count data
-Source data: 
-https://data.melbourne.vic.gov.au/Transport/Pedestrian-Counting-System-Monthly-counts-per-hour/b2ak-trbp
-
-```{r}
-col_spec <- cols(
-  ID = col_double(),
-  Date_Time = col_character(),
-  Year = col_double(),
-  Month = col_character(),
-  Mdate = col_double(),
-  Day = col_character(),
-  Time = col_double(),
-  Sensor_ID = col_double(),
-  Sensor_Name = col_character(),
-  Hourly_Counts = col_double()
-)
-# walkData <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Monthly__counts_per_hour_.csv", col_types = col_spec) 
-walkData <- read_csv("./data/observations/walk/Pedestrian_Counting_System_-_Monthly__counts_per_hour_.csv", col_types = col_spec) 
-walkData %>% glimpse()
-```
-
-```{r}
-walkDataFiltered <- walkData %>% 
-  filter(Year==2018,Month=="March") %>% 
-  filter(Day%in%c("Tuesday", "Wednesday", "Thursday"))
-walkDataFiltered %>% count(Year,Month,Day)
-```
-
-```{r}
-walkDataFiltered %>% glimpse()
-```
-
-### Adding location to the count data
-
-Source for sensor locations:
-https://data.melbourne.vic.gov.au/Transport/Pedestrian-Counting-System-Sensor-Locations/h57g-5234
-
-```{r}
-col_spec <- cols(
-  sensor_id = col_double(),
-  sensor_description = col_character(),
-  sensor_name = col_character(),
-  installation_date = col_date(format = ""),
-  status = col_character(),
-  note = col_character(),
-  direction_1 = col_character(),
-  direction_2 = col_character(),
-  latitude = col_double(),
-  longitude = col_double(),
-  location = col_character()
-)
-# walkSensorLocs <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Sensor_Locations.csv", col_types = col_spec)
-walkSensorLocs <- read_csv("./data/observations/walk/Pedestrian_Counting_System_-_Sensor_Locations.csv", col_types = col_spec)
-walkSensorLocs %>% glimpse()
-```
-
-```{r}
-walkDataJoined <- walkDataFiltered %>% 
-  left_join(walkSensorLocs, by=c("Sensor_ID"="sensor_id")) 
-walkDataJoined %>% glimpse()
-```
-
-
-```{r}
-walkDataCoordinated <- walkDataJoined %>% 
-  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>% 
-  st_transform(28355) %>% 
-  dplyr::select(ID,Sensor_ID, Sensor_Name, Hourly_Counts, direction_1, 
-                direction_2, Time, geometry)
-st_write(walkDataCoordinated, "walkDataCoordinated.sqlite", delete_layer=T)
-walkDataCoordinated %>% glimpse()
-```
-
-Mapping walking count point locations
-
-```{r}
-walkDataCoordinated %>% 
-  group_by(Sensor_ID) %>% 
-  summarise(totalVol=sum(Hourly_Counts)) %>% 
-  ggplot() +
-  annotation_map_tile(type="osmgrayscale",zoom=12, alpha=0.8) +
-  geom_sf(aes(color=totalVol))  
-```
-
-### Adding links from MATSim Network
-
-Each Sensor has two directions (eg direction_1: North; direction_2: South).  This step adds fields link_row_1, from_id_1 and to_id_2 for the MATSim Network links and nodes for direction_1; and link_row_2, from_id_2 and to_id_2 for direction_2.
-
-Many Sensors are on one side of a road only, eg Sensor 36 (Queen St near Collins St, west side). In that case, usually the links for the Sensor are:
-- the same, being a two-directional link that represents the relevant road/path, or
-- different, representing two one-directional links that each represent the relevant road/path.
-In these caes, as the Sensor is on one side of the road only, its observations should cover about 50% of the total number of pedestrians using the link or links in both directions (that is, the pedestrians walking on both sides of the road).
-
-In other cases, the Sensor represents the whole of a path in both directions, eg Sensor 25 (shared use path near Melbourne Convention & Exhibition Centre).  In that case, usually the link for the sensor is a two-directional link that represents the path.  Its observations should cover the total number of pedestrians using the link in both directions.
-
-However, there are many cases where a road is represented by two two-directional links; or by three or four links.  In these cases, one or two of these links will be selected for the Sensor, but the Sensor's observations will include pedestrians using both the selected links, and other unselected links that also represent the same road.  Examples include the following Sensors:
-- 1 & 2 (Bourke St Mall - 3 links)
-- 4, 15, 54 & 66 (locations in Swanston St - two 2-way links: footway and roadway)
-- 17 & 18 (Collins St near Exhibition St - two 2-way links: footway and roadway)
-- 21 (Russel St near Bourke St - 4 links)
-- 30 & 56 (locations in Lonsdale St - 3 links)
-- 44 (Swanston St near Elgin St - 3 links)
-- 48 (Victoria St near Elizabeth St - two 2-way links: footway and roadway)
-- 49 (Therry St - 2-way walkway and 1-way roadway)
-- 64 (Royal Pde near Grattan St - 3 links)
-- 75 (Spring St near Flinders St - 3 links)
-
-Sensor 5 (Princes Bridge) selects the link in Swanston St just north of Princes Bridge, rather than Princes Bridge itself.  This is not necessarily a bad outcome, because the link which represents Princes Bridge is selected by Sensor 29 (St Kilda Rd - Alexandra Gardens).
-
-Sensors 19 & 20 (Little Bourke Street) return NA results in eastbound direction.  This is because the street is one way, and there is no adjacent walking link in the correct direction.
-
-Sensor 57 (Bourke St Bridge) selects a link which crosses Wurundjeri Way (as the Bourke St Bridge does); but the full bridge across the rail station is not included in the MATSim Network, so cannot be selected.
-
-Sensors 77 and 78 (Harbour Esplanade pedestrian path and bike path) both select the same link.  This is because that link represents both of those paths in the MATSim network.
-
-
-```{r}
-walkDataCoordinated <- addWalkLinks(walkData = "./walkDataCoordinated.sqlite", 
-                                    layer = "walkdatacoordinated",
-                                    walkSensorLocs = walkSensorLocs,
-                                    networkLinks,
-                                    networkNodes)
-
-st_write(walkDataCoordinated, "walkDataCoordinated.sqlite", delete_dsn = T)
-
-walkDataCoordinated %>% glimpse()
-
+  geom_sf(aes(color=total_vol))  
 ```
 
 ## Public transport
@@ -565,14 +383,13 @@ stationDataWithGeom <- stationDataCoordinated %>%
   st_transform(28355) %>% 
   dplyr::select(stationName, stationID, Total=`Total Result`, geometry)
 
-
 ```
 
 Map of the train stops included for the calibration: 
 
 ```{r}
 stationDataWithGeom %>% 
-  st_intersection(GMelbBoundary) %>% 
+  st_intersection(gMelbBoundary) %>%
   ggplot() +
   annotation_map_tile(type="osmgrayscale",zoom=9) +
   geom_sf(aes(color=Total, size= Total)) +
@@ -580,30 +397,28 @@ stationDataWithGeom %>%
 
 ```
 
-```{r}
-st_write(stationDataWithGeom, "stationDataWithGeom.sqlite", delete_dsn = T)
-```
 
 ### Adding nodes from MATSim Network
 
 Add station nodes
 
 ```{r}
-stationDataWithGeom <- addStationNodes(patronageData = "./stationDataWithGeom.sqlite", 
-                                       layer = "stationdatawithgeom",
+stationDataJoined2Network <- addStationNodes(patronageData = stationDataWithGeom, 
                                        networkLinks,
-                                       networkNodes)
-st_write(stationDataWithGeom, "stationDataWithGeom.sqlite", delete_dsn = T)
+                                       networkNodes,
+                                       gMelbBoundary)
+st_write(stationDataJoined2Network, "./data/observationsJoined/stationDataJoined2Network.sqlite", delete_dsn = T)
 
 
 # Check that result is a connected network (except for Showgrounds and Flemington Racecourse)
 # Note that there are also  other links for express services
 # Note link gap between Highett and Cheltenham, because Southland station missing from patronage data
 rail.lines <- networkLinks %>%
-  filter(from_id %in% stationDataWithGeom$node_id & to_id %in% stationDataWithGeom$node_id)
+  filter(from_id %in% stationDataJoined2Network$node_id & 
+           to_id %in% stationDataJoined2Network$node_id)
 
 ggplot() + 
-  geom_sf(data = stationDataWithGeom, color = 'red') +
+  geom_sf(data = stationDataJoined2Network, color = 'red') +
   geom_sf(data = rail.lines, color = 'blue')
 
 ```
@@ -628,3 +443,144 @@ no.vertices  # should be 216 (218 stations in patronage data, excl. Showgrounds 
 #### Other potential sources for pt data: 
  - Train: https://philipmallis.com/blog/2019/02/14/station-patronage-in-victoria-2013-2018/
 - Bus: https://discover.data.vic.gov.au/dataset/ptv-metro-tram-stops
+
+
+
+
+
+
+
+## Walking Data
+
+NOTE: *WALKING IS NOT INCLUDED AT THIS STAGE
+
+Reading the walk count data
+Source data: 
+https://data.melbourne.vic.gov.au/Transport/Pedestrian-Counting-System-Monthly-counts-per-hour/b2ak-trbp
+
+```{r, eval=F}
+col_spec <- cols(
+  ID = col_double(),
+  Date_Time = col_character(),
+  Year = col_double(),
+  Month = col_character(),
+  Mdate = col_double(),
+  Day = col_character(),
+  Time = col_double(),
+  Sensor_ID = col_double(),
+  Sensor_Name = col_character(),
+  Hourly_Counts = col_double()
+)
+# walkData <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Monthly__counts_per_hour_.csv", col_types = col_spec) 
+walkData <- read_csv("./data/observations/walk/Pedestrian_Counting_System_-_Monthly__counts_per_hour_.csv", col_types = col_spec) 
+walkData %>% glimpse()
+```
+
+```{r, eval=F}
+walkDataFiltered <- walkData %>% 
+  filter(Year==2018,Month=="March") %>% 
+  filter(Day%in%c("Tuesday", "Wednesday", "Thursday"))
+walkDataFiltered %>% count(Year,Month,Day)
+```
+
+```{r, eval=F}
+walkDataFiltered %>% glimpse()
+```
+
+### Adding location to the count data
+
+Source for sensor locations:
+https://data.melbourne.vic.gov.au/Transport/Pedestrian-Counting-System-Sensor-Locations/h57g-5234
+
+```{r}
+col_spec <- cols(
+  sensor_id = col_double(),
+  sensor_description = col_character(),
+  sensor_name = col_character(),
+  installation_date = col_date(format = ""),
+  status = col_character(),
+  note = col_character(),
+  direction_1 = col_character(),
+  direction_2 = col_character(),
+  latitude = col_double(),
+  longitude = col_double(),
+  location = col_character()
+)
+# walkSensorLocs <- read_csv("~/ownCloud/io.github.jafshin/calibration-validation/data/observations/walk/Pedestrian_Counting_System_-_Sensor_Locations.csv", col_types = col_spec)
+walkSensorLocs <- read_csv("./data/observations/walk/Pedestrian_Counting_System_-_Sensor_Locations.csv", col_types = col_spec)
+walkSensorLocs %>% glimpse()
+```
+
+```{r, eval=F}
+walkDataJoined <- walkDataFiltered %>% 
+  left_join(walkSensorLocs, by=c("Sensor_ID"="sensor_id")) 
+walkDataJoined %>% glimpse()
+```
+
+
+```{r, eval=F}
+walkDataCoordinated <- walkDataJoined %>% 
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>% 
+  st_transform(28355) %>% 
+  dplyr::select(ID,Sensor_ID, Sensor_Name, Hourly_Counts, direction_1, 
+                direction_2, Time, geometry)
+# st_write(walkDataCoordinated, "./data/observationsJoined/walkDataCoordinated.sqlite", delete_layer=T)
+walkDataCoordinated %>% glimpse()
+```
+
+Mapping walking count point locations
+
+```{r, eval=F}
+walkDataCoordinated %>% 
+  group_by(Sensor_ID) %>% 
+  summarise(total_vol=sum(Hourly_Counts)) %>% 
+  ggplot() +
+  annotation_map_tile(type="osmgrayscale",zoom=12, alpha=0.8) +
+  geom_sf(aes(color=total_vol))  
+```
+
+### Adding links from MATSim Network
+
+Each Sensor has two directions (eg direction_1: North; direction_2: South).  This step adds fields link_row_1, from_id_1 and to_id_2 for the MATSim Network links and nodes for direction_1; and link_row_2, from_id_2 and to_id_2 for direction_2.
+
+Many Sensors are on one side of a road only, eg Sensor 36 (Queen St near Collins St, west side). In that case, usually the links for the Sensor are:
+- the same, being a two-directional link that represents the relevant road/path, or
+- different, representing two one-directional links that each represent the relevant road/path.
+In these caes, as the Sensor is on one side of the road only, its observations should cover about 50% of the total number of pedestrians using the link or links in both directions (that is, the pedestrians walking on both sides of the road).
+
+In other cases, the Sensor represents the whole of a path in both directions, eg Sensor 25 (shared use path near Melbourne Convention & Exhibition Centre).  In that case, usually the link for the sensor is a two-directional link that represents the path.  Its observations should cover the total number of pedestrians using the link in both directions.
+
+However, there are many cases where a road is represented by two two-directional links; or by three or four links.  In these cases, one or two of these links will be selected for the Sensor, but the Sensor's observations will include pedestrians using both the selected links, and other unselected links that also represent the same road.  Examples include the following Sensors:
+- 1 & 2 (Bourke St Mall - 3 links)
+- 4, 15, 54 & 66 (locations in Swanston St - two 2-way links: footway and roadway)
+- 17 & 18 (Collins St near Exhibition St - two 2-way links: footway and roadway)
+- 21 (Russel St near Bourke St - 4 links)
+- 30 & 56 (locations in Lonsdale St - 3 links)
+- 44 (Swanston St near Elgin St - 3 links)
+- 48 (Victoria St near Elizabeth St - two 2-way links: footway and roadway)
+- 49 (Therry St - 2-way walkway and 1-way roadway)
+- 64 (Royal Pde near Grattan St - 3 links)
+- 75 (Spring St near Flinders St - 3 links)
+
+Sensor 5 (Princes Bridge) selects the link in Swanston St just north of Princes Bridge, rather than Princes Bridge itself.  This is not necessarily a bad outcome, because the link which represents Princes Bridge is selected by Sensor 29 (St Kilda Rd - Alexandra Gardens).
+
+Sensors 19 & 20 (Little Bourke Street) return NA results in eastbound direction.  This is because the street is one way, and there is no adjacent walking link in the correct direction.
+
+Sensor 57 (Bourke St Bridge) selects a link which crosses Wurundjeri Way (as the Bourke St Bridge does); but the full bridge across the rail station is not included in the MATSim Network, so cannot be selected.
+
+Sensors 77 and 78 (Harbour Esplanade pedestrian path and bike path) both select the same link.  This is because that link represents both of those paths in the MATSim network.
+
+
+```{r}
+# walkObsJoined2Network <- addWalkLinks(walkData = walkDataCoordinated,
+#                                        walkSensorLocs = walkSensorLocs,
+#                                        networkLinks,
+#                                        networkNodes)
+
+# st_write(walkObsJoined2Network, "./data/observationsJoined/walkObsJoined2Network.sqlite",
+#          delete_dsn = T)
+# 
+# walkDataCoordinated %>% glimpse()
+
+```
+

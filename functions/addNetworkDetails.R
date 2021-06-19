@@ -10,25 +10,27 @@
 # - also add the link's from and to node id's
 
 addCarLinks <- function(carData,
-                        layer,
-                        network = "./generatedNetworks/MATSimMelbNetwork.sqlite",
+                        links,
+                        nodes,
+                        # network = "./generatedNetworks/MATSimMelbNetwork.sqlite",
                         # azimuth tolerance (to filter out links > 17.5 degrees from road azimuth)
                         az.tol = 17.5) {
   
-  # read in car data, and add columns for link_row and node from_ and to_ id's 
-  carData <- st_read(carData, layer = layer, quiet=T) %>%
-    mutate(link_row = NA, from_id = NA, to_id = NA)
+   carData = amHighVolCarData; links= networkLinks; nodes= networkNodes; az.tol = 17.5
   
+  # read in car data, and add columns for link_row and node from_ and to_ id's 
+  carData <- carData %>% 
+    st_as_sf() %>% 
+    mutate(link_row = "NA", from_id = "NA", to_id = "NA")
   # read in links and nodes
-  links <- st_read(network, layer = "links", quiet=T) %>%
-    mutate(link_id = row_number()) %>%
+  links <- links %>%
     # filter to main roads only ( don't include trunk_link, primary_link, secondary_link)
     filter(highway %in% c("motorway", "motorway_link", "trunk", "primary", "secondary"))
 
-  nodes <- st_read(network, layer = "nodes", quiet=T) %>%
+  nodes <- nodes %>%
     # filter to nodes used in links, to remove any disconnected (not really necessary)
     filter(id %in% links$from_id | id %in% links$to_id)
-  
+  # i=1
   for (i in 1:nrow(carData)) { 
     # find direction of road
     direction <- carData[i, "flow"] %>%
@@ -48,33 +50,39 @@ addCarLinks <- function(carData,
       filter(st_intersects(GEOMETRY, local.area, sparse = FALSE)) %>% 
       mutate(correct_dir = 0, correct_az = 0)
     
-    potential.links.oneway <- filtered.links %>%
-      filter(is_oneway == 1)
-    
-    potential.links.twoway <- filtered.links %>%
-      filter(is_oneway == 0)
-    
-    potential.links.twoway.reversed <- potential.links.twoway %>%
-      mutate(new.from = to_id, new.to = from_id) %>%
-      mutate(from_id = new.from, to_id = new.to)
-    
-    potential.links <- dplyr::bind_rows(potential.links.oneway,
-                                        potential.links.twoway,
-                                        potential.links.twoway.reversed) %>%
+    # Commenting these out as now we are starting from XML network and all links are already uni-directional in the xml - AJ 18 Jun 2021 
+    # potential.links.oneway <- filtered.links %>%
+    #   filter(is_oneway == 1)
+    # 
+    # potential.links.twoway <- filtered.links %>%
+    #   filter(is_oneway == 0)
+    # 
+    # potential.links.twoway.reversed <- potential.links.twoway %>%
+    #   mutate(new.from = to_id, new.to = from_id) %>%
+    #   mutate(from_id = new.from, to_id = new.to)
+    # 
+    # potential.links <- dplyr::bind_rows(potential.links.oneway,
+    #                                     potential.links.twoway,
+    #                                     potential.links.twoway.reversed) %>%
+    potential.links <- filtered.links %>% 
       dplyr::select(link_id, from_id, to_id)
     
     # filter to links in correct direction and with correct azimuth
+    # j=1
     for (j in 1:nrow(potential.links)) {
       link <- potential.links[j, ]
       
       # set correct_dir to 1 if correct direction
       startpoint <- nodes[nodes$id == link$from_id, ]
       endpoint <- nodes[nodes$id == link$to_id, ]
-      if (direction == "EAST" & startpoint$x < endpoint$x | # startpoint has lower easting coordinate
-          direction == "WEST" & startpoint$x > endpoint$x | # startpoint has higher easting coordinate
-          direction == "NORTH" & startpoint$y < endpoint$y | # startpoint has lower northing coordinate
-          direction == "SOUTH" & startpoint$y > endpoint$y) # startpoint has higher northing coordinate
-      {
+      if (# startpoint has lower easting coordinate
+          direction == "EAST" & startpoint$x < endpoint$x | 
+          # startpoint has higher easting coordinate
+          direction == "WEST" & startpoint$x > endpoint$x | 
+          # startpoint has lower northing coordinate
+          direction == "NORTH" & startpoint$y < endpoint$y | 
+          # startpoint has higher northing coordinate
+          direction == "SOUTH" & startpoint$y > endpoint$y) {
         potential.links[j, "correct_dir"] <- 1
       }
 
@@ -102,20 +110,20 @@ addCarLinks <- function(carData,
       filter(correct_dir == 1 & correct_az == 1)
 
     # get midpoint of road (contained in the data)
-    midpoint <- carData[i, ] %>%
+    midpoint <- carData[i, ] %>% 
       st_drop_geometry() %>%
       st_as_sf(coords = c("midpnt_lon", "midpnt_lat"), remove = F, crs = 4326) %>%
       st_transform(28355)
     
     # find filtered link closest to the midpoint (st_nearest_feature returns the index)
     closest.link <- potential.links[st_nearest_feature(midpoint, potential.links), ]
-    
+    # carData <- carData %>% st_as_sf()
     # complete link_row with row number of closest.link
-    carData[i, "link_row"] <- closest.link$link_id
+    carData$link_row[i] <- as.character(closest.link$link_id)
     
     # complete from_id and to_id with node numbers for closest link
-    carData[i, "from_id"] <- closest.link$from_id
-    carData[i, "to_id"] <- closest.link$to_id
+    carData$from_id[i] <- closest.link$from_id
+    carData$to_id[i] <- closest.link$to_id
   }
   return(carData)
 }
@@ -134,7 +142,9 @@ addCarLinks <- function(carData,
 
 addBikeLinks <- function(cyclingVolAverage,
                          cycleCountersMeta,
-                         network = "./generatedNetworks/MATSimMelbNetwork.sqlite") {
+                         links,
+                         nodes) {
+                         # network = "./generatedNetworks/MATSimMelbNetwork.sqlite") {
   cycleCounterCoordinated <- cycleCountersMeta %>% 
     # Extracting the site number
     mutate(siteNumber=stringr::str_extract(site,pattern = "X[0-9]+")) %>% 
@@ -205,8 +215,8 @@ addBikeLinks <- function(cyclingVolAverage,
     st_as_sf(.)
   
   # read in links and nodes
-  links <- st_read(network, layer = "links", quiet=T) %>%
-    mutate(link_id = row_number())
+  # links <- st_read(network, layer = "links", quiet=T) %>%
+  #   mutate(link_id = row_number())
   
   lane.links <- links %>%
     filter(cycleway %in% c("lane", "seperated_lane", "shared_lane"))
@@ -214,7 +224,7 @@ addBikeLinks <- function(cyclingVolAverage,
   path.links <- links %>%
     filter(cycleway == "bikepath")
   
-  nodes <- st_read(network, layer = "nodes", quiet=T) %>%
+  nodes <- nodes %>%
     # filter to nodes used in links, to remove any disconnected (not really necessary)
     filter(id %in% lane.links$from_id | id %in% lane.links$to_id | 
              id %in% path.links$from_id | id %in% path.links$to_id)
@@ -334,9 +344,10 @@ addBikeLinks <- function(cyclingVolAverage,
 # - also add the link's from and to node id's
 
 addWalkLinks <- function(walkData,
-                         layer,
                          walkSensorLocs,
-                         network = "./generatedNetworks/MATSimMelbNetwork.sqlite") {
+                         links,
+                         nodes) {
+                         # network = "./generatedNetworks/MATSimMelbNetwork.sqlite") {
   
   # read in sensor locations, and add columns for link_row and node from_ and to_ id's 
   locationTable <- walkSensorLocs %>%
@@ -346,12 +357,11 @@ addWalkLinks <- function(walkData,
     st_transform(28355)
   
   # read in links and nodes
-  links <- st_read(network, layer = "links", quiet=T) %>%
-    mutate(link_id = row_number()) %>%
+  links <- links %>%
     # filter to walkable links
-    filter(is_walk == 1)
+    filter(str_detect(modes, "walk"))
   
-  nodes <- st_read(network, layer = "nodes", quiet=T) %>%
+  nodes <- nodes %>%
     # filter to nodes used in links, to remove any disconnected (not really necessary)
     filter(id %in% links$from_id | id %in% links$to_id)
   
@@ -509,7 +519,7 @@ addWalkLinks <- function(walkData,
     st_drop_geometry
   
   # read in walkData
-  walkData <- st_read(walkData, layer = layer, quiet=T)
+  # walkData <- st_read(walkData, layer = layer, quiet=T)
   
   # join link data to walkData
   walkData <- walkData %>%
@@ -529,25 +539,29 @@ addWalkLinks <- function(walkData,
 # - add the node id to the patronage file
 
 addStationNodes <- function(patronageData,
-                            layer,
-                            network = "./generatedNetworks/MATSimMelbNetwork.sqlite") {
+                            links,
+                            nodes,
+                            gMelbBoundary) {
+                            # network = "./generatedNetworks/MATSimMelbNetwork.sqlite") {
+  
+  patronageData = stationDataWithGeom; links=networkLinks; nodes=networkNodes
   
   # read in links and nodes; filter to PT over 400m (smallest station distance Riversdale-Willison 418m:
   # https://maps.philipmallis.com/distances-between-melbourne-railway-stations-a-quick-map/ )
-  links <- st_read(network, layer = "links", quiet=T) %>%
-    mutate(link_id = row_number()) %>%
-    filter(highway == "pt" & length > 400)
+  links <- links %>% 
+    filter(modes == "pt" & length > 400) 
   
-  nodes <- st_read(network, layer = "nodes", quiet=T) %>%
+  nodes <- nodes %>%
     filter(id %in% links$from_id | id %in% links$to_id)
   
   # make graph; find nodes from largest connected sub-graph; filter nodes and links accordingly
   # see https://stackoverflow.com/questions/64344845/getting-the-biggest-connected-component-in-r-igraph
-  graph <- graph_from_data_frame(links, directed = F, vertices = nodes)
+  g <- graph_from_data_frame(st_drop_geometry(links[,c("from_id","to_id")]),
+                                 directed = F, vertices = nodes)
   
-  components <- clusters(graph)
+  components <- clusters(g)
   biggest_cluster_id <- which.max(components$csize)
-  vertices <- V(graph)[components$membership == biggest_cluster_id]
+  vertices <- V(g)[components$membership == biggest_cluster_id]
   vert_ids <- as.numeric(vertices$name)
   
   nodes <- nodes %>%
@@ -558,7 +572,7 @@ addStationNodes <- function(patronageData,
     filter(from_id %in% nodes$id & to_id %in% nodes$id)
   
   # read in station patronage data, and add column for node_id
-  patronageData <- st_read(patronageData, layer = layer, quiet=T)
+  # patronageData <- st_read(patronageData, layer = layer, quiet=T)
   
   # find nearest nodes (st_nearest_feature returns the index; find the corresponding node id in 'nodes')
   nearest.nodes <- nodes[st_nearest_feature(patronageData, nodes), "id"] %>%
@@ -567,7 +581,7 @@ addStationNodes <- function(patronageData,
   # add to station patronage data - but not for Flemington Racecourse and Showgrounds: they are not
   # in the links/nodes network, so their 'nearest nodes' are distant station
   patronageData <- patronageData %>%
-    mutate(node_id = ifelse(stationname %in% c("Showgrounds Station", "Flemington Racecourse"), NA,
+    mutate(node_id = ifelse(stationName %in% c("Showgrounds Station", "Flemington Racecourse"), NA,
                             nearest.nodes$id))
   
   return(patronageData)

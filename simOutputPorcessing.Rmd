@@ -194,7 +194,7 @@ tripLinkAggregatedDaily <- tripLinksWithTime %>%
   summarise(total_vol=n())
 
 networkLinksWithDailyVol <- networkLinks %>% left_join(tripLinkAggregatedDaily, by = "id")   
-st_write(networkLinksWithDailyVol, "networkLinksWithDailyVol.sqlite", delete_layer = T)
+st_write(networkLinksWithDailyVol, "./data/simOutputJoined/networkLinksWithDailyVol.sqlite", delete_layer = T)
 ```
 
 plotting daily volume
