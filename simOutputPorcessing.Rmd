@@ -16,6 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(ggplot2)
 library(ggspatial)
+library(sf)
 library(fs)
 source("./functions/convertXMLNetwork.R")
 ```
@@ -59,7 +60,7 @@ grep "vehicle leaves traffic\|vehicle enters traffic" |
 sed -e "s/vehicle leaves traffic/vehicle_leaves_traffic/g;" |
 sed -e "s/vehicle enters traffic/vehicle_enters_traffic/g;" |
 cut -d "\"" -f 2,4,6,8,10,12 |
-sed -e "s/\"/,/g"|
+sed -e "s/\"/,/g"|`
 sed -e '1i\'$'\n''time,type,person,link,vehicle,networkMode' | cat > ./data/simOutput/vehicle_trip.txt
 
 # Activity-startend actstart
@@ -184,26 +185,31 @@ if (file.exists("./data/networks/networkConverted.sqlite")) {
 
 ### Road network with Daily traffic volume
 
-Joining daily data to road network
+Joining daily car traffic data to road network
 
-```{r joining daily volumes to network}
+```{r joining daily car volumes to network}
 
-tripLinkAggregatedDaily <- tripLinksWithTime %>% 
+carTripLinkAggregatedDaily <- tripLinksWithTime %>% 
+  filter(networkMode=="car") %>% # filter to car trips only
   mutate(id=as.character(link)) %>% 
   group_by(id) %>% 
   summarise(total_vol=n())
 
-networkLinksWithDailyVol <- networkLinks %>% left_join(tripLinkAggregatedDaily, by = "id")   
-st_write(networkLinksWithDailyVol, "./data/simOutputJoined/networkLinksWithDailyVol.sqlite", delete_layer = T)
+networkLinksWithDailyVol_car <- networkLinks %>% 
+  left_join(carTripLinkAggregatedDaily, by = "id")   
+st_write(networkLinksWithDailyVol_car, 
+         "./data/simOutputJoined/networkLinksWithDailyVol.sqlite",
+         layer="car",
+         delete_layer = T)
 ```
 
-plotting daily volume
+plotting daily car traffic volume
 
-```{r plotting daily volumes on network}
+```{r plotting daily car volumes on network}
 
 # networkLinksWithDailyVol$total_vol <- st_read("networkLinksWithDailyVol.sqlite")
 
-networkLinksWithDailyVol %>% 
+networkLinksWithDailyVol_car %>% 
   drop_na(total_vol) %>% 
   # filter(total_vol>10) %>% 
   ggplot() +
@@ -212,3 +218,40 @@ networkLinksWithDailyVol %>%
   scale_fill_viridis_c(trans = "sqrt", alpha = .8) 
 
 ```
+
+
+Joining daily bike traffic data to road network
+
+```{r joining daily bike volumes to network}
+
+bikeTripLinkAggregatedDaily <- tripLinksWithTime %>% 
+  filter(networkMode=="bike") %>% # filter to car trips only
+  mutate(id=as.character(link)) %>% 
+  group_by(id) %>% 
+  summarise(total_vol=n())
+
+networkLinksWithDailyVol_bike <- networkLinks %>% 
+  left_join(bikeTripLinkAggregatedDaily, by = "id")   
+
+st_write(networkLinksWithDailyVol_bike, 
+         "./data/simOutputJoined/networkLinksWithDailyVol.sqlite",
+         layer="bike",
+         delete_layer = T)
+```
+
+plotting daily bike traffic volume
+
+```{r plotting daily bike volumes on network}
+
+# networkLinksWithDailyVol$total_vol <- st_read("networkLinksWithDailyVol.sqlite")
+
+networkLinksWithDailyVol_bike %>% 
+  drop_na(total_vol) %>% 
+  # filter(total_vol>10) %>% 
+  ggplot() +
+  # annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) +
+  geom_sf(aes(fill=total_vol)) +
+  scale_fill_viridis_c(trans = "sqrt", alpha = .8) 
+
+```
+
