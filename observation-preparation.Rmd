@@ -427,7 +427,7 @@ Further check that results form a connected graph of 216 stations
 
 ```{r}
 # make graph to check that all stops are in fact connected
-rail.graph <- graph_from_data_frame(rail.lines, directed = F) %>%
+rail.graph <- graph_from_data_frame(rail.lines[,c("from_id","to_id")], directed = F) %>%
   suppressWarnings()
 
 # count vertices in largest subgraph

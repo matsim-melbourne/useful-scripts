@@ -37,9 +37,9 @@ prepareCarData <- function(carDataFile="./data/observations/car/TYPICAL_HOURLY_V
   # st_write(carDataJoined, "./data/observationsJoined/carDataJoined.sqlite", delete_dsn = T)
   
   # gMelbBoundary <- st_read("~/ownCloud/Data/ABS_Boundaries/GreaterMelbourneArea/GMEL_SA4_2016_Polygons.sqlite")  %>% 
-  gMelbBoundary <- st_read(sa4BoundaryFile)  %>% 
-    st_transform(28355) %>%
-    summarise()  # to dissolve SA4s (without this, roads get split at SA4 boundaries)
+  # gMelbBoundary <- st_read(sa4BoundaryFile)  %>% 
+  #   st_transform(28355) %>%
+  #   summarise()  # to dissolve SA4s (without this, roads get split at SA4 boundaries)
   
   carDataCroped <- carDataJoined %>% 
     st_intersection(gMelbBoundary)

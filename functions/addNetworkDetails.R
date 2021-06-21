@@ -16,7 +16,7 @@ addCarLinks <- function(carData,
                         # azimuth tolerance (to filter out links > 17.5 degrees from road azimuth)
                         az.tol = 17.5) {
   
-   carData = amHighVolCarData; links= networkLinks; nodes= networkNodes; az.tol = 17.5
+   # carData = amHighVolCarData; links= networkLinks; nodes= networkNodes; az.tol = 17.5
   
   # read in car data, and add columns for link_row and node from_ and to_ id's 
   carData <- carData %>% 
@@ -523,7 +523,7 @@ addWalkLinks <- function(walkData,
   
   # join link data to walkData
   walkData <- walkData %>%
-    left_join(locationTable, by = "sensor_id")
+    left_join(locationTable, by = c("Sensor_ID" = "sensor_id"))
   
   return(walkData)
 }
@@ -549,7 +549,7 @@ addStationNodes <- function(patronageData,
   # read in links and nodes; filter to PT over 400m (smallest station distance Riversdale-Willison 418m:
   # https://maps.philipmallis.com/distances-between-melbourne-railway-stations-a-quick-map/ )
   links <- links %>% 
-    filter(modes == "pt" & length > 400) 
+    filter(modes == "pt" & as.numeric(length) > 400) 
   
   nodes <- nodes %>%
     filter(id %in% links$from_id | id %in% links$to_id)
@@ -565,8 +565,8 @@ addStationNodes <- function(patronageData,
   vert_ids <- as.numeric(vertices$name)
   
   nodes <- nodes %>%
-    filter(id %in% vert_ids) %>%
-    st_intersection(gMelbBoundary)
+    filter(id %in% vert_ids) #%>%
+    # st_intersection(gMelbBoundary)
   
   links <- links %>%
     filter(from_id %in% nodes$id & to_id %in% nodes$id)
