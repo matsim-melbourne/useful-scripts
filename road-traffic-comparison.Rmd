@@ -1,0 +1,81 @@
+---
+title: "road-traffic-comparison"
+author: "jafshin"
+date: "16/06/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(sf)
+
+```
+
+## Road traffic comparison
+
+This document is to compare traffic volumes from real-world observations to simulation outputs.
+
+Steps before this step:
+- Running **observation-preparation.Rmd** to process real-world observations and generate three 
+- Runnning **simOutputProcessing.Rmd** to process to create traffic volume joined
+
+## Car traffic
+
+```{r Reading input data}
+
+amCarObservations <- read_sf("./data/observationsJoined/carAmObsJoined2Network.sqlite") %>% 
+  dplyr::select(link_id, starts_with("x")) 
+pmCarObservations <- read_sf("./data/observationsJoined/carPmObsJoined2Network.sqlite") %>% 
+  dplyr::select(link_id, starts_with("x"))
+
+if (all(colnames(amCarObservations)==colnames(pmCarObservations))) {
+  if (nrow(filter(carAmObservations,link_id%in%carPmObservations$link_id))==0) {
+      carObservations <- rbind(st_drop_geometry(amCarObservations), 
+                               st_drop_geometry(pmCarObservations))
+  }else print("There is a duplicate link_id in AM and PM data!")
+}else print("Colnames in AM and PM car observations does not match!")
+
+carSimulation <- read_sf("./data/simOutputJoined/networkLinksWithHourlyVol.sqlite", 
+                         layer="car")
+
+```
+
+
+```{r restructuring observation and simulation data}
+
+carObservationsLong <- carObservations %>% 
+  pivot_longer(cols = starts_with("x"), names_to="hour", values_to="obs_volume") %>% 
+  mutate(hour=as.integer(str_remove(hour,"x"))) #%>% 
+  # mutate(Source="Observation")
+
+carSimulationFiltered <- carSimulation %>% 
+  st_drop_geometry() %>% 
+  dplyr::select(link_id=id, starts_with("X")) %>% 
+  filter(link_id %in% carObservations$link_id)
+
+carSimulationLong <- carSimulationFiltered %>% 
+  pivot_longer(cols = starts_with("X"), names_to="hour", values_to="sim_volume") %>% 
+  mutate(hour=as.integer(str_remove(hour,"X"))) %>% 
+  mutate(sim_volume=sim_volume*10) # %>% # Because I used 10% sample
+  # mutate(Source="Simulation")
+
+carData <- carObservationsLong %>% 
+  left_join(carSimulationLong, by = c("link_id","hour"))
+
+```
+
+
+```{r}
+
+carData %>% 
+  # filter(link_id==11169) %>% 
+  ggplot(aes(x=hour)) +
+  geom_line(aes(y=obs_volume, color="observation")) + 
+  geom_line(aes(y=sim_volume, color="simulation")) +
+  facet_wrap("link_id")
+
+ggsave("test.png", width= 50, height = 50, units="cm")
+
+```
+
