@@ -25,6 +25,13 @@ source('./functions/prepareCarData.R')
 
 ```
 
+```{r building the output folder structure}
+
+if (!dir.exists("./data/observationsJoined/")) dir.create("./data/observationsJoined/")
+if (!dir.exists("./data/simOutputJoined/")) dir.create("./data/simOutputJoined/")
+
+```
+
 ```{r road network data}
 
 gMelbBoundary <- st_read("./data/boundaries/GreaterMelbourneArea/GMEL_SA4_2016_Polygons.sqlite")  %>% 
@@ -49,6 +56,7 @@ if (file.exists("./data/networks/networkConverted.sqlite")) {
 
 ```
 
+
 ## Car traffic data
 
 ### Car traffic data cleaning 
@@ -67,8 +75,6 @@ if (file.exists("./data/observations/car/carDataCroped.sqlite")) {
   carDataCroped <- st_read("./data/observations/car/carDataCroped.sqlite", 
                            quiet=T)
   }
-
-
 
 ```
 
@@ -541,7 +547,7 @@ walkDataCoordinated %>%
 
 ### Adding links from MATSim Network
 
-Each Sensor has two directions (eg direction_1: North; direction_2: South).  This step adds fields link_row_1, from_id_1 and to_id_2 for the MATSim Network links and nodes for direction_1; and link_row_2, from_id_2 and to_id_2 for direction_2.
+Each Sensor has two directions (eg direction_1: North; direction_2: South).  This step adds fields link_id_1, from_id_1 and to_id_2 for the MATSim Network links and nodes for direction_1; and link_id_2, from_id_2 and to_id_2 for direction_2.
 
 Many Sensors are on one side of a road only, eg Sensor 36 (Queen St near Collins St, west side). In that case, usually the links for the Sensor are:
 - the same, being a two-directional link that represents the relevant road/path, or

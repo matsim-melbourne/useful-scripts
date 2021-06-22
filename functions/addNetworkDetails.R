@@ -18,10 +18,10 @@ addCarLinks <- function(carData,
   
    # carData = amHighVolCarData; links= networkLinks; nodes= networkNodes; az.tol = 17.5
   
-  # read in car data, and add columns for link_row and node from_ and to_ id's 
+  # read in car data, and add columns for link_id and node from_ and to_ id's 
   carData <- carData %>% 
     st_as_sf() %>% 
-    mutate(link_row = "NA", from_id = "NA", to_id = "NA")
+    mutate(link_id = "NA", from_id = "NA", to_id = "NA")
   # read in links and nodes
   links <- links %>%
     # filter to main roads only ( don't include trunk_link, primary_link, secondary_link)
@@ -118,8 +118,8 @@ addCarLinks <- function(carData,
     # find filtered link closest to the midpoint (st_nearest_feature returns the index)
     closest.link <- potential.links[st_nearest_feature(midpoint, potential.links), ]
     # carData <- carData %>% st_as_sf()
-    # complete link_row with row number of closest.link
-    carData$link_row[i] <- as.character(closest.link$link_id)
+    # complete link_id with row number of closest.link
+    carData$link_id[i] <- as.character(closest.link$link_id)
     
     # complete from_id and to_id with node numbers for closest link
     carData$from_id[i] <- closest.link$from_id
@@ -303,8 +303,8 @@ addBikeLinks <- function(cyclingVolAverage,
     # find potential link closest to the site (st_nearest_feature returns the index)
     closest.link <- potential.links[st_nearest_feature(locationTable[i, ], potential.links), ]
     
-    # complete link_row with row number of closest.link
-    locationTable[i, "link_row"] <- closest.link$link_id
+    # complete link_id with row number of closest.link
+    locationTable[i, "link_id"] <- closest.link$link_id
     
     # complete from_id and to_id with node numbers for closest link
     locationTable[i, "from_id"] <- closest.link$from_id
@@ -349,7 +349,7 @@ addWalkLinks <- function(walkData,
                          nodes) {
                          # network = "./generatedNetworks/MATSimMelbNetwork.sqlite") {
   
-  # read in sensor locations, and add columns for link_row and node from_ and to_ id's 
+  # read in sensor locations, and add columns for link_id and node from_ and to_ id's 
   locationTable <- walkSensorLocs %>%
     # remove where no direction (these locations don't appearin walkData)
     filter(!is.na(direction_1) & !is.na(direction_2)) %>%
@@ -494,13 +494,13 @@ addWalkLinks <- function(walkData,
         sensor <- locationTable[i, ]
         closest.link <- potential.links.az[st_nearest_feature(sensor, potential.links.az), ]
         
-        # complete link_row, from_id and to_id for each direction
+        # complete link_id, from_id and to_id for each direction
         if (k == "direction_1") {
-          locationTable[i, "link_row_1"] <- closest.link$link_id
+          locationTable[i, "link_id_1"] <- closest.link$link_id
           locationTable[i, "from_id_1"] <- closest.link$from_id
           locationTable[i, "to_id_1"] <- closest.link$to_id
         } else if (k == "direction_2") {
-          locationTable[i, "link_row_2"] <- closest.link$link_id
+          locationTable[i, "link_id_2"] <- closest.link$link_id
           locationTable[i, "from_id_2"] <- closest.link$from_id
           locationTable[i, "to_id_2"] <- closest.link$to_id
         }
@@ -514,8 +514,8 @@ addWalkLinks <- function(walkData,
   # convert locationTable to data needed for join
   locationTable <- locationTable %>%
     dplyr::select(sensor_id, 
-                  link_row_1, from_id_1, to_id_1,
-                  link_row_2, from_id_2, to_id_2) %>%
+                  link_id_1, from_id_1, to_id_1,
+                  link_id_2, from_id_2, to_id_2) %>%
     st_drop_geometry
   
   # read in walkData
