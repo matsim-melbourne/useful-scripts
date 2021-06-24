@@ -22,7 +22,7 @@ Steps before this step:
 
 ## Car traffic
 
-```{r Reading input data}
+```{r Reading input car traffic data}
 
 amCarObservations <- read_sf("./data/observationsJoined/carAmObsJoined2Network.sqlite") %>% 
   dplyr::select(link_id, starts_with("x")) 
@@ -42,7 +42,7 @@ carSimulation <- read_sf("./data/simOutputJoined/networkLinksWithHourlyVol.sqlit
 ```
 
 
-```{r restructuring observation and simulation data}
+```{r restructuring observation and simulation car data}
 
 carObservationsLong <- carObservations %>% 
   pivot_longer(cols = starts_with("x"), names_to="hour", values_to="obs_volume") %>% 
@@ -65,6 +65,7 @@ carData <- carObservationsLong %>%
 
 ```
 
+Plotting the volumes
 
 ```{r}
 
@@ -75,7 +76,104 @@ carData %>%
   geom_line(aes(y=sim_volume, color="simulation")) +
   facet_wrap("link_id")
 
-ggsave("test.png", width= 50, height = 50, units="cm")
+ggsave("car.png", width= 50, height = 50, units="cm")
 
 ```
+
+
+Calculating GEH Statistic for car traffic
+
+```{r}
+
+carDataWithGEH <- carData %>% 
+  mutate(gehStat= sqrt((2*(sim_volume-obs_volume)^2)/(sim_volume+obs_volume)))
+
+```
+
+Plotting the GEH for car traffic
+
+```{r}
+
+carDataWithGEH %>% 
+  # filter(link_id==11169) %>% 
+  ggplot(aes(x=hour)) +
+  geom_line(aes(y=gehStat)) + 
+  facet_wrap("link_id")
+
+ggsave("carGeh.png", width= 50, height = 50, units="cm")
+
+```
+
+
+
+## Bike traffic
+
+```{r Reading input bike traffic data}
+
+bikeObservations <- read_sf("./data/observationsJoined/cyclingObsJoined2Network.sqlite") %>% 
+  dplyr::select(link_id, hour, obs_volume = count) %>% 
+  st_drop_geometry()
+
+bikeSimulation <- read_sf("./data/simOutputJoined/networkLinksWithHourlyVol.sqlite", 
+                         layer="bike")
+
+```
+
+
+```{r restructuring observation and simulation bike data}
+
+bikeSimulationFiltered <- bikeSimulation %>% 
+  st_drop_geometry() %>% 
+  dplyr::select(link_id=id, starts_with("X")) %>% 
+  filter(link_id %in% bikeObservations$link_id)
+
+bikeSimulationLong <- bikeSimulationFiltered %>% 
+  pivot_longer(cols = starts_with("X"), names_to="hour", values_to="sim_volume") %>% 
+  mutate(hour=as.integer(str_remove(hour,"X"))) %>% 
+  mutate(sim_volume=sim_volume*10) # %>% # Because I used 10% sample
+  # mutate(Source="Simulation")
+
+bikeData <- bikeObservations %>% 
+  left_join(bikeSimulationLong, by = c("link_id","hour"))
+
+```
+
+Plotting the volumes
+
+```{r}
+
+bikeData %>% 
+  # filter(link_id==11169) %>% 
+  ggplot(aes(x=hour)) +
+  geom_line(aes(y=obs_volume, color="observation")) + 
+  geom_line(aes(y=sim_volume, color="simulation")) +
+  facet_wrap("link_id")
+
+ggsave("bike.png", width= 50, height = 50, units="cm")
+
+```
+
+Calculating GEH Statistic for Bike traffic
+
+```{r}
+
+bikeDataWithGEH <- bikeData %>% 
+  mutate(gehStat= sqrt((2*(sim_volume-obs_volume)^2)/(sim_volume+obs_volume)))
+
+```
+
+Plotting the GEH for Bike traffic
+
+```{r}
+
+bikeDataWithGEH %>% 
+  # filter(link_id==11169) %>% 
+  ggplot(aes(x=hour)) +
+  geom_line(aes(y=gehStat)) + 
+  facet_wrap("link_id")
+
+ggsave("bikeGeh.png", width= 50, height = 50, units="cm")
+
+```
+
 
