@@ -12,6 +12,15 @@ library(sf)
 
 ```
 
+```{r folder structure}
+
+simDesc <- "10pct_noMc_bicycle_v1"
+outputDir <- paste0("./calibrationOutputs/", simDesc,"/")
+if (!dir.exists(outputDir)) dir.create(outputDir)
+
+
+```
+
 ## Road traffic comparison
 
 This document is to compare traffic volumes from real-world observations to simulation outputs.
@@ -30,7 +39,7 @@ pmCarObservations <- read_sf("./data/observationsJoined/carPmObsJoined2Network.s
   dplyr::select(link_id, starts_with("x"))
 
 if (all(colnames(amCarObservations)==colnames(pmCarObservations))) {
-  if (nrow(filter(carAmObservations,link_id%in%carPmObservations$link_id))==0) {
+  if (nrow(filter(amCarObservations,link_id%in%pmCarObservations$link_id))==0) {
       carObservations <- rbind(st_drop_geometry(amCarObservations), 
                                st_drop_geometry(pmCarObservations))
   }else print("There is a duplicate link_id in AM and PM data!")
@@ -76,7 +85,7 @@ carData %>%
   geom_line(aes(y=sim_volume, color="simulation")) +
   facet_wrap("link_id")
 
-ggsave("car.png", width= 50, height = 50, units="cm")
+ggsave(paste0(outputDir,"car.png"), width= 50, height = 50, units="cm")
 
 ```
 
@@ -88,6 +97,8 @@ Calculating GEH Statistic for car traffic
 carDataWithGEH <- carData %>% 
   mutate(gehStat= sqrt((2*(sim_volume-obs_volume)^2)/(sim_volume+obs_volume)))
 
+st_write(carDataWithGEH, paste0(outputDir,"calibrationData.sqlite"), 
+         layer="car", delete_layer=T)
 ```
 
 Plotting the GEH for car traffic
@@ -100,7 +111,7 @@ carDataWithGEH %>%
   geom_line(aes(y=gehStat)) + 
   facet_wrap("link_id")
 
-ggsave("carGeh.png", width= 50, height = 50, units="cm")
+ggsave(paste0(outputDir,"carGeh.png"), width= 50, height = 50, units="cm")
 
 ```
 
@@ -149,7 +160,7 @@ bikeData %>%
   geom_line(aes(y=sim_volume, color="simulation")) +
   facet_wrap("link_id")
 
-ggsave("bike.png", width= 50, height = 50, units="cm")
+ggsave(paste0(outputDir,"bike.png"), width= 50, height = 50, units="cm")
 
 ```
 
@@ -159,7 +170,8 @@ Calculating GEH Statistic for Bike traffic
 
 bikeDataWithGEH <- bikeData %>% 
   mutate(gehStat= sqrt((2*(sim_volume-obs_volume)^2)/(sim_volume+obs_volume)))
-
+st_write(bikeDataWithGEH, paste0(outputDir,"calibrationData.sqlite"), 
+         layer="bike", delete_layer=T)
 ```
 
 Plotting the GEH for Bike traffic
@@ -172,7 +184,7 @@ bikeDataWithGEH %>%
   geom_line(aes(y=gehStat)) + 
   facet_wrap("link_id")
 
-ggsave("bikeGeh.png", width= 50, height = 50, units="cm")
+ggsave(paste0(outputDir,"bikeGeh.png"), width= 50, height = 50, units="cm")
 
 ```
 

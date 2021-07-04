@@ -222,7 +222,7 @@ addBikeLinks <- function(cyclingVolAverage,
     filter(cycleway %in% c("lane", "seperated_lane", "shared_lane"))
   
   path.links <- links %>%
-    filter(cycleway == "bikepath")
+    filter(cycleway == "bicyclepath")
   
   nodes <- nodes %>%
     # filter to nodes used in links, to remove any disconnected (not really necessary)
