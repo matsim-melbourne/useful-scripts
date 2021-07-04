@@ -3,13 +3,15 @@ title: "road-traffic-comparison"
 author: "jafshin"
 date: "16/06/2021"
 output: html_document
+params: 
+  processObsData: TRUE
+  processSimData: TRUE
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(sf)
-
 ```
 
 ```{r folder structure}
@@ -18,7 +20,6 @@ simDesc <- "10pct_noMc_bicycle_v1"
 outputDir <- paste0("./calibrationOutputs/", simDesc,"/")
 if (!dir.exists(outputDir)) dir.create(outputDir)
 
-
 ```
 
 ## Road traffic comparison
@@ -26,8 +27,27 @@ if (!dir.exists(outputDir)) dir.create(outputDir)
 This document is to compare traffic volumes from real-world observations to simulation outputs.
 
 Steps before this step:
-- Running **observation-preparation.Rmd** to process real-world observations and generate three 
-- Runnning **simOutputProcessing.Rmd** to process to create traffic volume joined
+- Running **observation-preparation.Rmd** to process real-world observations
+- Running **simOutputProcessing.Rmd** to process to create traffic volume joined
+
+Run the chunk below to process real-world observations 
+```{r processing real-world observations}
+# processObsData=T
+if(params$processObsData) rmarkdown::render("observation-preparation.Rmd",
+                                     output_dir=outputDir, quiet = T)
+```
+
+Run the chunk below to process simulation outputs
+```{r processing simulation outputs}
+# processSimData=TRUE
+if(params$processSimData) rmarkdown::render("simOutputPorcessing.Rmd",
+                                     output_dir=outputDir, quiet = F,
+                                     params = list(
+                                       parseXML=FALSE
+                                       )
+                                     )
+```
+
 
 ## Car traffic
 

@@ -3,6 +3,8 @@ title: "simulationOutputPorcessing"
 author: "jafshin"
 date: "15/06/2021"
 output: html_document
+params:
+  parseXML: FALSE
 ---
 
 ## Simulation output post-processing for Calibration/validation
@@ -20,11 +22,12 @@ library(sf)
 library(vroom)
 library(fs)
 source("./functions/convertXMLNetwork.R")
+print(params$parseXML)
 ```
 
 ### Converting event.xml output to CSVs
 
-```{r cleaning old files, eval=F}
+```{r cleaning old files, eval=params$parseXM}
 paths <- dir_ls("./data/simOutput/",glob = "*.txt" )
 if (length(paths)>0) {
   walk(paths, ~file.remove(.x))
@@ -32,7 +35,7 @@ if (length(paths)>0) {
 ```
 
 
-```{bash processing event XMLs, eval=F}
+```{bash processing event XMLs, eval=params$parseXM}
 
 #!/bin/bash
 if [[ $# -eq 0 ]]; then
@@ -185,7 +188,6 @@ networkLinksWithDailyVol_car %>%
   scale_fill_viridis_c(trans = "sqrt", alpha = .8) 
 
 ```
-
 
 Joining daily bike traffic data to road network
 
