@@ -24,14 +24,15 @@ source("./functions/convertXMLNetwork.R")
 
 ### Converting event.xml output to CSVs
 
-```{r cleaning old files, eval=FALSE}
+```{r cleaning old files, eval=F}
 paths <- dir_ls("./data/simOutput/",glob = "*.txt" )
 if (length(paths)>0) {
   walk(paths, ~file.remove(.x))
 }
 ```
 
-```{bash processing event XMLs, eval=FALSE}
+
+```{bash processing event XMLs, eval=F}
 
 #!/bin/bash
 if [[ $# -eq 0 ]]; then
@@ -61,7 +62,7 @@ grep "vehicle leaves traffic\|vehicle enters traffic" |
 sed -e "s/vehicle leaves traffic/vehicle_leaves_traffic/g;" |
 sed -e "s/vehicle enters traffic/vehicle_enters_traffic/g;" |
 cut -d "\"" -f 2,4,6,8,10,12 |
-sed -e "s/\"/,/g"|`
+sed -e "s/\"/,/g"|
 sed -e '1i\'$'\n''time,type,person,link,vehicle,networkMode' | cat > ./data/simOutput/vehicle_trip.txt
 
 # Activity-startend actstart
@@ -70,6 +71,7 @@ grep "actstart\|actend" |
 cut -d "\"" -f 2,4,6,8,10 |
 sed -e "s/\"/,/g"|
 sed -e '1i\'$'\n''time,type,person,link,actType' | cat > ./data/simOutput/person_act.txt
+
 
 ```
 
@@ -190,7 +192,7 @@ Joining daily bike traffic data to road network
 ```{r joining daily bike volumes to network, eval=FALSE}
 
 bikeExitLinkAggregatedDaily <- exitLinksWithTime %>% 
-  filter(networkMode=="bike") %>% # filter to car trips only
+  filter(networkMode=="bicycle") %>% # filter to car trips only
   mutate(id=as.character(link)) %>% 
   group_by(id) %>% 
   summarise(total_vol=n())
@@ -273,7 +275,7 @@ Joining Hourly bike traffic data to road network
 
 bikeExitLinkAggregatedHourly <- exitLinksWithTime %>%
 # bikeExitLinkAggregatedHourly <- tempDf %>% 
-  filter(networkMode=="bike") %>% # filter to car trips only
+  filter(networkMode=="bicycle") %>% # filter to car trips only
   mutate(id=as.character(link)) %>% 
   group_by(id, leftHour) %>% 
   summarise(hourly_vol=n()) %>% 
