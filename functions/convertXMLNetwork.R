@@ -1,7 +1,7 @@
 convertXMLNetowrk <- function(xmlFile = "./data/simOutput/output_network.xml",
                               netCRS = 28355){
-  xmlFile <- "./data/simOutput/output_network.xml"
-  netCRS = 28355
+  # xmlFile <- "./data/simOutput/output_network.xml"
+  # netCRS = 28355
   
   require(xml2)
   library(sf)

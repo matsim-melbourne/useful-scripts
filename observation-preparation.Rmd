@@ -46,6 +46,7 @@ if (file.exists("./data/networks/networkConverted.sqlite")) {
   networkNodes <- st_read("./data/networks/networkConverted.sqlite", 
                           layer = "nodes", quiet=T) 
 }else{
+  if (!dir.exists("./data/networks/")) dir.create("./data/networks/")
   networkConverted <- convertXMLNetowrk(xmlFile = "./data/simOutput/output_network.xml",
                                         netCRS = 28355)
   networkNodes <- networkConverted[[1]]
@@ -55,7 +56,6 @@ if (file.exists("./data/networks/networkConverted.sqlite")) {
 }
 
 ```
-
 
 ## Car traffic data
 
