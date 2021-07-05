@@ -203,3 +203,75 @@ rbind(mutate(simOutputJTWCounted,source="Simulation Output JTW"),
             position=position_dodge(width=0.9), vjust=-0.25)
 
 ```
+## Primary trips (work/edu) Analysis
+
+
+```{r VISTA primary trips}
+
+vistaPrimary <- vistaTrips %>%
+  filter(DESTPURP1%in%c("Education", "Work Related")) %>% 
+  # Filtering to valid trips
+  filter(CUMDIST>0) %>% 
+  # Refactoring the linkmode in VISTA
+  mutate(mode=case_when(LINKMODE=="Bicycle" ~ "bicycle",
+                        LINKMODE=="Vehicle Driver" ~ "car", # Check with Dhirendra/Alan what happens to car passengers?
+                        LINKMODE=="Walking" ~ "walk",
+                        LINKMODE%in%c("Public Bus","Train","Tram") ~ "pt",
+                        TRUE ~ "other")) %>% 
+  # Filtering out modes==other
+  filter(mode!="other") 
+
+vistaPrimaryCounted <- vistaPrimary %>% 
+  # counting trips per mode
+  # count(mode) %>% 
+  filter(!is.na(WDTRIPWGT)) %>% 
+  group_by(mode) %>% 
+  summarise(n=sum(WDTRIPWGT)) %>% 
+  # get the percentages
+  mutate(pct=100*n/sum(n))
+
+vistaPrimaryCounted
+```
+
+
+```{r Simulation input Primary trips}
+
+simInputPrimary <- simInputTrips %>% 
+  filter(Activity%in%c("Work","Study")) 
+  
+simInputPrimaryCounted <- simInputPrimary %>% 
+  # counting trips per mode
+  count(mode=ArrivingMode) %>% 
+  # getting the percentage 
+  mutate(pct=100*n/sum(n))
+
+simInputPrimaryCounted
+```
+
+
+```{r Simulation Output JTW}
+
+simOutputPrimary <- simOutputTrips %>% 
+  filter(end_activity_type%in%c("Work", "Study")) 
+  
+simOutputPrimaryCounted <- simOutputPrimary  %>% 
+  # Counting number of trips with each mode
+  count(mode=longest_distance_mode) %>% 
+  # Getting the pct
+  mutate(pct=100*n/sum(n)) 
+
+simOutputPrimaryCounted
+```
+
+### Plotting JTW trips
+```{r}
+rbind(mutate(simOutputPrimaryCounted,source="Simulation Output"),
+      mutate(simInputPrimaryCounted,source="Simulation Input"),
+      mutate(vistaPrimaryCounted,source="VISTA")
+      ) %>% 
+  ggplot(aes(x=mode, y=pct, fill=source)) +
+  geom_col(position="dodge") +
+  geom_text(aes(label=paste0(round(pct, digits = 1),"%")), 
+            position=position_dodge(width=0.9), vjust=-0.25)
+
+```
