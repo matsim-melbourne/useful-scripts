@@ -1,0 +1,205 @@
+---
+title: "mode-share-comparison"
+author: "jafshin"
+date: "05/07/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## Intro
+
+This is code compares the mode share of trips from Simulation output to 
+- Simulation input
+- VISTA
+- Census JTW for work trips
+
+## Mode share comparison for All trips
+
+### Simulation output processing
+
+```{r reading sim outputs}
+
+simOutputTrips <- read_delim(gzfile("data/simOutput/10pct/exp1-noMc-100iters/output_trips.csv.gz"),
+                      delim=";") %>% 
+  # Removing trips with zero distance
+  filter(traveled_distance>0) 
+
+```
+
+```{r}
+
+simOutputTripsCounted <- simOutputTrips %>% 
+  # Counting number of trips with each mode
+  count(mode=longest_distance_mode) %>% 
+  # Getting the pct
+  mutate(pct=100*n/sum(n)) 
+
+```
+
+### Simulation input processing
+
+```{r}
+demandOutputDir <- "~/github/matsim-melbourne/demand/output-v1.1-10pct/"
+simInputTrips <- read_csv(paste0(demandOutputDir,"7.time/plan.csv")) %>% 
+  # filtering those without mode
+  filter(!is.na(ArrivingMode)) %>%
+  # filtering the trips that are not a vakid trip!
+  filter(!is.na(Distance)) %>% 
+  # renaming bike with bicycle
+  mutate(ArrivingMode=ifelse(ArrivingMode=="bike","bicycle",ArrivingMode)) 
+
+```
+
+```{r}
+simInputTripsCounted <- simInputTrips %>% 
+  # counting trips per mode
+  count(mode=ArrivingMode) %>% 
+  # getting the percentage 
+  mutate(pct=100*n/sum(n))
+```
+
+### VISTA trips processing
+
+```{r}
+
+vistaTrips <- read_csv("~/ownCloud/Data/VISTA/2012-18/T_VISTA1218_V1.csv")
+
+vistaTripsCounted <- vistaTrips %>% 
+  # Filtering to valid trips
+  filter(CUMDIST>0) %>% 
+  # Refactoring the linkmode in VISTA
+  mutate(mode=case_when(LINKMODE=="Bicycle" ~ "bicycle",
+                        LINKMODE=="Vehicle Driver" ~ "car", # Check with Dhirendra/Alan what happens to car passengers?
+                        LINKMODE=="Walking" ~ "walk",
+                        LINKMODE%in%c("Public Bus","Train","Tram") ~ "pt",
+                        TRUE ~ "other")) %>% 
+  # Filtering out modes==other
+  filter(mode!="other") %>% 
+  # counting trips per mode
+  # count(mode) %>% 
+  filter(!is.na(WDTRIPWGT)) %>% 
+  group_by(mode) %>% 
+  summarise(n=sum(WDTRIPWGT)) %>% 
+  # get the percentages
+  mutate(pct=100*n/sum(n))
+vistaTripsCounted
+```
+
+### Plotting them all 
+
+```{r}
+
+rbind(mutate(simOutputTripsCounted,source="Simulation Output"),
+      mutate(simInputTripsCounted,source="Simulation Input"),
+      mutate(vistaTripsCounted,source="VISTA Trips")
+      ) %>% 
+  ggplot(aes(x=mode, y=pct, fill=source)) +
+  geom_col(position="dodge") +
+  geom_text(aes(label=paste0(round(pct, digits = 1),"%")), 
+            position=position_dodge(width=0.9), vjust=-0.25)
+
+```
+
+## Mode share comparison for JTW trips
+
+```{r Census JTW}
+
+censusJTW <- read_csv("~/ownCloud/Data/ABS_Census/SA3 (UR) and MTW15P Method of Travel to Work (15 travel modes).csv", 
+                        skip=9, ) %>%
+  rename(HomeSA3=`SA3 (UR)`,
+         MTW=`MTW15P Method of Travel to Work (15 travel modes)`) %>%
+  dplyr::select(-Counting, -X5) %>%
+  filter(!is.na(MTW)) %>% 
+  filter(MTW!="Total") %>% 
+  # filter(HomeSA3 %in% unique(HomeSA3)) %>% 
+  mutate(mode=case_when(MTW=="Bicycle" ~ "bicycle",
+                        MTW%in%c("Car, as driver") ~ "car", # Not including ,"Car, as passenger"
+                        MTW%in%c("Bus","Train", "Tram") ~ "pt",
+                        MTW=="Walked only" ~ "walk",
+                        TRUE ~ "other")) %>% 
+  filter(mode!="other") 
+
+
+
+censusJTWCounted <- censusJTW %>% 
+  group_by(mode) %>% 
+  summarise(n=sum(Count)) %>% 
+  mutate(pct=100*n/sum(n)) %>% 
+  dplyr::select(mode, n, pct)
+
+censusJTWCounted
+```
+
+```{r VISTA JTW}
+
+vistaJTW <- read_csv("~/ownCloud/Data/VISTA/2012-18/JTW_VISTA1218_V1.csv") %>% 
+  # Filtering to valid trips
+  filter(JTWDIST>0) %>% 
+  # Refactoring the linkmode in VISTA
+  mutate(mode=case_when(JTWMODE=="Bicycle" ~ "bicycle",
+                        JTWMODE=="Vehicle Driver" ~ "car", # Check with Dhirendra/Alan what happens to car passengers?
+                        JTWMODE=="Walking" ~ "walk",
+                        JTWMODE%in%c("Public Bus","Train","Tram") ~ "pt",
+                        TRUE ~ "other")) %>% 
+  # Filtering out modes==other
+  filter(mode!="other") 
+
+vistaJTWCounted <- vistaJTW %>% 
+  # counting trips per mode
+  # count(mode) %>% 
+  filter(!is.na(WDJTWWGT)) %>% 
+  group_by(mode) %>% 
+  summarise(n=sum(WDJTWWGT)) %>% 
+  # get the percentages
+  mutate(pct=100*n/sum(n))
+
+vistaJTWCounted
+```
+
+
+```{r Simulation input JTW}
+
+simInputJTW <- simInputTrips %>% 
+  filter(Activity=="Work") 
+  
+simInputJTWCounted <- simInputJTW %>% 
+  # counting trips per mode
+  count(mode=ArrivingMode) %>% 
+  # getting the percentage 
+  mutate(pct=100*n/sum(n))
+
+simInputJTWCounted
+```
+
+
+```{r Simulation Output JTW}
+
+simOutputJTW <- simOutputTrips %>% 
+  filter(end_activity_type=="Work") 
+  
+simOutputJTWCounted <- simOutputJTW  %>% 
+  # Counting number of trips with each mode
+  count(mode=longest_distance_mode) %>% 
+  # Getting the pct
+  mutate(pct=100*n/sum(n)) 
+
+simOutputJTWCounted
+```
+
+### Plotting JTW trips
+```{r}
+rbind(mutate(simOutputJTWCounted,source="Simulation Output JTW"),
+      mutate(simInputJTWCounted,source="Simulation Input JTW"),
+      mutate(vistaJTWCounted,source="VISTA JTW"),
+      mutate(censusJTWCounted,source="Census JTW")
+      ) %>% 
+  ggplot(aes(x=mode, y=pct, fill=source)) +
+  geom_col(position="dodge") +
+  geom_text(aes(label=paste0(round(pct, digits = 1),"%")), 
+            position=position_dodge(width=0.9), vjust=-0.25)
+
+```

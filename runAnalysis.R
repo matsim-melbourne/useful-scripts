@@ -1,5 +1,7 @@
 processObsData <- T
 processSimData <- T
+roadTrafficAnalysis <- T
+modeShareAnalysis <- T
 
 # Building the folder structure
 # Change the dir name based on your simulation run
@@ -22,10 +24,15 @@ if(processSimData) rmarkdown::render("simOutputPorcessing.Rmd",
                                      output_dir=outputDir, quiet = F,
                                      params = list(parseXML=FALSE))
 
-# Runing the comparison for road traffic
+# Running the analysis for road traffic
 # This code requires both observation and simulation data processed and
 # placed in the correct directory
-if(roadTrafficComp) rmarkdown::render("road-traffic-comparison.Rmd",
+if(roadTrafficAnalysis) rmarkdown::render("road-traffic-comparison.Rmd",
+                                     output_dir=outputDir, quiet = F)
+# Running the analysis for mode share
+# This code VISTA, Censsu JTW data and also simulation input and outputs data 
+# Make sure to download/place them in correct directoris 
+if(modeShareAnalysis) rmarkdown::render("mode-share-comparison.Rmd",
                                      output_dir=outputDir, quiet = F)
 
 
