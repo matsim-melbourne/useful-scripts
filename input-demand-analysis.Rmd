@@ -23,7 +23,7 @@ Here I am comparing Origin and Destinations to Census Journey to work
 
 ```{r cars}
 
-outputDir <- "~/github/matsim-melbourne/demand/output/"
+outputDir <- "~/github/matsim-melbourne/demand/output-v1.1-10pct/"
 plans <- read_csv(paste0(outputDir,"7.time/plan.csv"))
 attribs <- rbind(read_csv(paste0(outputDir,"3.match/match_1.csv")),
                  read_csv(paste0(outputDir,"3.match/match_2.csv")),
