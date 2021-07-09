@@ -47,7 +47,7 @@ if (file.exists("./data/networks/networkConverted.sqlite")) {
                           layer = "nodes", quiet=T) 
 }else{
   if (!dir.exists("./data/networks/")) dir.create("./data/networks/")
-  networkConverted <- convertXMLNetowrk(xmlFile = "./data/simOutput/output_network.xml",
+  networkConverted <- convertXMLNetowrk(xmlFile = "./data/simOutputs/output_network.xml.gz",
                                         netCRS = 28355)
   networkNodes <- networkConverted[[1]]
   networkLinks <- networkConverted[[2]] %>% 

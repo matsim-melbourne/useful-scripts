@@ -3,7 +3,7 @@ processSimData <- T
 
 # Building the folder structure
 # Change the dir name based on your simulation run
-simDesc <- "10pct_noMc_bicycle_v1"
+simDesc <- "10pct_noMc_bicycle_v2"
 outputDir <- paste0("./calibrationOutputs/", simDesc,"/")
 if (!dir.exists(outputDir)) dir.create(outputDir)
 
@@ -20,7 +20,7 @@ if(processObsData) rmarkdown::render("observation-preparation.Rmd",
 # If skipping, make sure to have the joined data in simDataJoined dir
 if(processSimData) rmarkdown::render("simOutputPorcessing.Rmd",
                                      output_dir=outputDir, quiet = F,
-                                     params = list(parseXML=FALSE))
+                                     params = list(parseXML=TRUE))
 
 # Runing the comparison for road traffic
 # This code requires both observation and simulation data processed and

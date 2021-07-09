@@ -28,7 +28,7 @@ print(params$parseXML)
 ### Converting event.xml output to CSVs
 
 ```{r cleaning old files, eval=params$parseXM}
-paths <- dir_ls("./data/simOutput/",glob = "*.txt" )
+paths <- dir_ls("./data/simOutputs/",glob = "*.txt" )
 if (length(paths)>0) {
   walk(paths, ~file.remove(.x))
 }
@@ -39,7 +39,7 @@ if (length(paths)>0) {
 
 #!/bin/bash
 if [[ $# -eq 0 ]]; then
-  events_file=./data/simOutput/output_events.xml.gz;
+  events_file=./data/simOutputs/output_events.xml.gz;
 else
   events_file=$1
 fi
@@ -49,7 +49,7 @@ zcat $events_file | tail -n +3 | head -n -2 |
 grep "departure\|arrival" |
 cut -d "\"" -f 2,4,6,8,10 |
 sed -e "s/\"/,/g"|
-sed -e '1i\'$'\n''time,type,person,link,legMode' | cat > ./data/simOutput/person_trip.txt
+sed -e '1i\'$'\n''time,type,person,link,legMode' | cat > ./data/simOutputs/person_trip.txt
 
 # left link and entered link
 zcat $events_file | tail -n +3 | head -n -2 |
@@ -57,7 +57,7 @@ grep "left link\|entered link" |
 sed -e "s/left link/left_link/g; s/entered link/entered_link/g " |
 cut -d "\"" -f 2,4,6,8 |
 sed -e "s/\"/,/g"|
-sed -e '1i\'$'\n''time,type,link,vehicle' | cat > ./data/simOutput/trip_links.txt
+sed -e '1i\'$'\n''time,type,link,vehicle' | cat > ./data/simOutputs/trip_links.txt
 
 # vehicle-traffic interaction
 zcat $events_file | tail -n +3 | head -n -2 |
@@ -66,14 +66,14 @@ sed -e "s/vehicle leaves traffic/vehicle_leaves_traffic/g;" |
 sed -e "s/vehicle enters traffic/vehicle_enters_traffic/g;" |
 cut -d "\"" -f 2,4,6,8,10,12 |
 sed -e "s/\"/,/g"|
-sed -e '1i\'$'\n''time,type,person,link,vehicle,networkMode' | cat > ./data/simOutput/vehicle_trip.txt
+sed -e '1i\'$'\n''time,type,person,link,vehicle,networkMode' | cat > ./data/simOutputs/vehicle_trip.txt
 
 # Activity-startend actstart
 zcat  $events_file | tail -n +3 | head -n -2 |
 grep "actstart\|actend" |
 cut -d "\"" -f 2,4,6,8,10 |
 sed -e "s/\"/,/g"|
-sed -e '1i\'$'\n''time,type,person,link,actType' | cat > ./data/simOutput/person_act.txt
+sed -e '1i\'$'\n''time,type,person,link,actType' | cat > ./data/simOutputs/person_act.txt
 
 
 ```
@@ -82,16 +82,16 @@ sed -e '1i\'$'\n''time,type,person,link,actType' | cat > ./data/simOutput/person
 
 ```{r reading trip link events}
 
-tripLinks <- vroom("./data/simOutput/trip_links.txt")
-# tripLinks %>% slice_sample(prop=0.1) %>% write_delim("./data/simOutput/trip_links_small.txt")
-# tripLinks <- vroom("./data/simOutput/trip_links_small.txt") 
+tripLinks <- vroom("./data/simOutputs/trip_links.txt")
+# tripLinks %>% slice_sample(prop=0.1) %>% write_delim("./data/simOutputs/trip_links_small.txt")
+# tripLinks <- vroom("./data/simOutputs/trip_links_small.txt") 
 
 ```
 
 Adding mode type to the trips
 
 ```{r adding mode to link events}
-vehicleTrips <- read_csv("./data/simOutput/vehicle_trip.txt")
+vehicleTrips <- read_csv("./data/simOutputs/vehicle_trip.txt")
 
 vehicleLists <- vehicleTrips %>% 
   distinct(person,vehicle,networkMode) 
@@ -145,7 +145,7 @@ if (file.exists("./data/networks/networkConverted.sqlite")) {
   networkLinks <- st_read("./data/networks/networkConverted.sqlite", 
                           layer = "links", quiet=T)
 }else{
-  networkConverted <- convertXMLNetowrk(xmlFile = "./data/simOutput/output_network.xml",
+  networkConverted <- convertXMLNetowrk(xmlFile = "./data/simOutputs/output_network.xml",
                                         netCRS = 28355)
   networkLinks <- networkConverted[[2]]
 }
