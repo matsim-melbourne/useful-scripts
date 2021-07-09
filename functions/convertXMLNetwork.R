@@ -1,6 +1,6 @@
-convertXMLNetowrk <- function(xmlFile = "./data/simOutput/output_network.xml",
+convertXMLNetowrk <- function(xmlFile = "./data/simOutputs/output_network.xml.gz",
                               netCRS = 28355){
-  # xmlFile <- "./data/simOutput/output_network.xml"
+  # xmlFile <- "./data/simOutputs/output_network.xml.gz"
   # netCRS = 28355
   
   require(xml2)
@@ -9,7 +9,7 @@ convertXMLNetowrk <- function(xmlFile = "./data/simOutput/output_network.xml",
   library(purrr)
   
   # Reading the network xml
-  netXML <- read_xml(xmlFile)
+  netXML <- read_xml(gzfile(xmlFile))
   
   # Processing nodes --------------------------------------------------------
   
