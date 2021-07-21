@@ -1,0 +1,139 @@
+---
+title: "travel-distance-comparison"
+author: "jafshin"
+date: "05/07/2021"
+output: html_document
+---
+
+## Intro
+
+This code compares travel time and distance from Simulation output with Google Maps API
+To use this code you need to have a valid Google Maps API key.
+copy and paste your API key in the 'api/google.key' to be used below
+Please note Google Maps API is NOT a free service - be aware of the potential costs
+
+```{r setup, include=FALSE}
+library(mapsapi)
+library(sf)
+library(tidyverse)
+apikey <- readLines("./api/google.key")
+
+```
+
+```{r Reading input from simulation}
+
+
+simOutputTrips <- read_delim(gzfile("data/simOutput/10pct/exp1-noMc-100iters/output_trips.csv.gz"),
+                      delim=";") %>% 
+  # Removing trips with zero distance
+  filter(traveled_distance>0) 
+
+# Adding time of the day and date to the trips
+```
+Sampling for each valid mode (adjust n)
+
+```{r sampling the trips}
+n <- 10
+tripsSampled <- simOutputTrips %>% 
+  group_by(longest_distance_mode) %>% 
+  slice_sample(n = n) %>% 
+  ungroup()
+```
+
+Getting the distance and time for sampled trips for Google API
+
+```{r get dist and time}
+
+modesMap=tibble(modes=c("pt","car","walk","bicycle"),
+           gMode=c("transit","driving","walking", "bicycling"))
+
+tripsWithDepTime <- tripsSampled %>% 
+  left_join(modesMap, by=c("longest_distance_mode"="modes")) %>% 
+  mutate(depDate = paste0(Sys.Date() + 1, " ", dep_time)) %>% 
+  mutate(depDate = as.POSIXct(depDate,format="%Y-%m-%d %H:%M:%OS",tz = Sys.timezone())) 
+
+origins <- tripsWithDepTime %>% 
+  dplyr::select(trip_id,start_x, start_y) %>% 
+  mutate(GEOMETRY=paste0("POINT(",start_x," ",start_y,")")) %>%
+  st_as_sf(wkt = "GEOMETRY", crs = 28355) %>% 
+  as.data.frame() %>%
+  st_sf() %>% 
+  st_transform(4283)
+
+destinations <- tripsWithDepTime %>% 
+  dplyr::select(trip_id,end_x, end_y) %>% 
+  mutate(GEOMETRY=paste0("POINT(",end_x," ",end_y,")")) %>%
+  st_as_sf(wkt = "GEOMETRY", crs = 28355) %>% 
+  as.data.frame() %>%
+  st_sf() %>% 
+  st_transform(4283)
+
+```
+
+## Assigning the Google Time and Distance to the Sample
+
+```{r}
+
+i=1
+for(i in 1:nrow(tripsWithDepTime)){
+# for(i in 1:10){
+  if(i%%10 == 0) print(paste0("trip number ",i," out of ", nrow(tripsWithDepTime), " trips"))
+  route=mapsapi::mp_matrix(origins = origins[i,"GEOMETRY"],
+                           destinations = destinations[i,"GEOMETRY"],
+                           mode = tripsWithDepTime$gMode[i],
+                           departure_time = tripsWithDepTime$depDate[i],
+                           traffic_model="best_guess",
+                           key = apikey)
+  tripsWithDepTime[i,"time_google"] <- route %>% mp_get_matrix(value = c("duration_s")) %>% as.numeric()
+  tripsWithDepTime[i,"distance_google"] <- route %>% mp_get_matrix(value = c("distance_m")) %>% as.numeric()
+}
+```
+
+```{r}
+tripsProcessed <- tripsWithDepTime %>% 
+  mutate(trav_time=seconds(trav_time)) %>% 
+  mutate(time_google=seconds(time_google)) %>% 
+  dplyr::select(person, trip_number, depDate, mode=longest_distance_mode,
+                time_simulation=trav_time, distance_simulation=traveled_distance,
+                time_google, distance_google) %>%
+  mutate(`Travel Distance Difference`=100*(distance_simulation-distance_google)/distance_google) %>%
+  mutate(`Travel Time Difference`=100*(time_simulation-time_google)/time_google) 
+
+write_csv(tripsProcessed, "tripsProcessed.csv")
+
+```
+
+## Comparing the time and distance
+
+### Time
+
+```{r}
+
+tripsProcessed %>% 
+  filter(`Travel Time Difference`<1000) %>%
+  ggplot(aes(x=mode, y=`Travel Time Difference`,color=mode)) +
+  geom_violin()
+
+```
+
+### Distance
+
+```{r}
+
+
+tripsProcessed %>% 
+  # filter(`Travel Distance Difference`<1000) %>%
+  ggplot(aes(x=mode, y=`Travel Distance Difference`,color=mode)) +
+  geom_violin()
+
+
+```
+
+## Statistical test to examine the significance of difference
+
+```{r}
+#wilcox.test(formula = distance_simulation ~ distance_google, 
+#                            data=tripsProcessed, paired=T, p.adjust.method="BH",conf.level=0.95)
+```
+
+
