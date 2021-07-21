@@ -37,3 +37,10 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# Input/output data
+*.html
+*.csv
+*.png
+*.sqlite
+*.xml
