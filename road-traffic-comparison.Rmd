@@ -9,6 +9,8 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(sf)
+library(viridis)
+library(ggspatial)
 ```
 
 
@@ -71,7 +73,40 @@ carData <- carObservationsLong %>%
 
 ```
 
-Plotting the volumes
+### Plotting the volumes
+
+Daily simulated car traffic for all roads
+
+```{r}
+
+carSimulationFiltered <- carSimulation %>% 
+  filter(total_vol>0) %>% 
+  mutate(volumeAdjusted=total_vol*10) %>% 
+  dplyr::select(volumeAdjusted)
+
+carBreakPoints <- pretty(carSimulationFiltered$volumeAdjusted, n = 6)
+
+ggplot(carSimulationFiltered) +
+  annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) +
+  geom_sf(aes(size=volumeAdjusted, colour=volumeAdjusted, alpha=volumeAdjusted)) +
+  # geom_sf(aes( size=n, colour=n ))  +
+  scale_color_viridis(option="magma", trans="sqrt", breaks=carBreakPoints, name="Daily volume" ) +
+  scale_alpha_continuous(name="Daily volume", trans="sqrt", range=c(0.05, .9), breaks=carBreakPoints) +
+  scale_size_continuous(name="Daily volume", range=c(0.01, 2), breaks=carBreakPoints) +
+    theme_void() + 
+    guides( colour = guide_legend()) +
+    theme(
+      legend.position = c(0.85, 0.8),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/carDailyTraffic.png",
+       width = 7, height = 7)
+```
+
 
 ```{r}
 
@@ -84,6 +119,70 @@ carData %>%
 
 ggsave(paste0(outputDir,"car.png"), width= 50, height = 50, units="cm")
 
+```
+Selecting two properly matched car data
+
+```{r}
+carData %>% 
+  filter(link_id%in%c(11011, 116340)) %>% 
+  # filter(link_id==11169) %>% 
+  ggplot(aes(x=hour)) +
+  geom_line(aes(y=obs_volume, color="observation")) + 
+  geom_line(aes(y=sim_volume, color="simulation")) +
+  facet_wrap("link_id") +
+  theme(
+      legend.position = "bottom",
+      legend.title = element_blank(),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    ) +
+  xlab("Hour of the day") +
+  ylab("Traffic volume")
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/carSelected.png",
+       width= 7, height = 4)
+```
+
+
+All car on the road traffice
+
+```{r}
+
+carSimHourlyAll <- carSimulationLong %>% 
+  filter(!is.na(sim_volume)) %>% 
+  filter(hour<24) %>% 
+  group_by(hour) %>% 
+  summarise(volume=sum(sim_volume)) %>%
+  mutate(volume_ratio=100*volume/sum(volume)) %>% 
+  mutate(source="Simulation")
+
+carObsHourlyAll <- carObservationsLong %>% 
+  group_by(hour) %>% 
+  summarise(volume=sum(obs_volume)) %>% 
+    mutate(volume_ratio=100*volume/sum(volume)) %>% 
+  mutate(source="Observation")
+
+rbind(carObsHourlyAll,
+carSimHourlyAll) %>% 
+  # filter(link_id==11169) %>% 
+  ggplot(aes(x=hour,y=volume_ratio, color=source)) +
+  geom_col(aes(fill=source),position = "identity" , alpha=0.2) +
+  geom_line() + 
+  theme(
+      legend.position = "bottom",
+      legend.title = element_blank(),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    ) +
+  xlab("Hour of the day") +
+  ylab("Traffic volume %")
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/carTrafficOveral.png",
+       width= 7, height = 6)
 ```
 
 
@@ -146,7 +245,40 @@ bikeData <- bikeObservations %>%
 
 ```
 
-Plotting the volumes
+### Plotting the volumes
+
+Daily simulated bike traffic for all roads
+
+```{r}
+
+bikeSimulationFiltered <- bikeSimulation %>% 
+  filter(total_vol>0) %>% 
+  mutate(volumeAdjusted=total_vol*10) %>% 
+  dplyr::select(volumeAdjusted)
+
+breakPoints <- pretty(bikeSimulationFiltered$volumeAdjusted, n = 6)
+
+ggplot(bikeSimulationFiltered) +
+  annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) +
+  geom_sf(aes(size=volumeAdjusted, colour=volumeAdjusted, alpha=volumeAdjusted)) +
+  # geom_sf(aes( size=n, colour=n ))  +
+  scale_color_viridis(option="magma", trans="sqrt", breaks=breakPoints, name="Daily volume" ) +
+  scale_alpha_continuous(name="Daily volume", trans="sqrt", range=c(0.1, .9), breaks=breakPoints) +
+  scale_size_continuous(name="Daily volume", range=c(0.01, 2), breaks=breakPoints) +
+    theme_void() + 
+    guides( colour = guide_legend()) +
+    theme(
+      legend.position = c(0.85, 0.8),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/bikeDailyTraffic.png",
+       width = 7, height = 7)
+```
+
 
 ```{r}
 
@@ -160,6 +292,71 @@ bikeData %>%
 ggsave(paste0(outputDir,"bike.png"), width= 50, height = 50, units="cm")
 
 ```
+
+Selecting two properly matched bike data
+
+```{r}
+bikeData %>% 
+  filter(link_id%in%c(191054, 446314)) %>% 
+  # filter(link_id==11169) %>% 
+  ggplot(aes(x=hour)) +
+  geom_line(aes(y=obs_volume, color="observation")) + 
+  geom_line(aes(y=sim_volume, color="simulation")) +
+  facet_wrap("link_id") +
+  theme(
+      legend.position = "bottom",
+      legend.title = element_blank(),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    ) +
+  xlab("Hour of the day") +
+  ylab("Traffic volume")
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/bikeSelected.png",
+       width= 7, height = 4)
+```
+
+All bikes on the road traffice
+
+```{r}
+
+bikeSimHourlyAll <- bikeSimulationLong %>% 
+  filter(!is.na(sim_volume)) %>% 
+  filter(hour<24) %>% 
+  group_by(hour) %>% 
+  summarise(volume=sum(sim_volume)) %>% 
+  mutate(volume_ratio =100* volume/sum(volume)) %>% 
+  mutate(source="Simulation")
+
+bikeObsHourlyAll <- bikeObservations %>% 
+  group_by(hour) %>% 
+  summarise(volume=sum(obs_volume)) %>% 
+  mutate(volume_ratio =100* volume/sum(volume)) %>% 
+  mutate(source="Observation")
+
+rbind(bikeObsHourlyAll,
+bikeSimHourlyAll) %>% 
+  # filter(link_id==11169) %>% 
+  ggplot(aes(x=hour,y=volume_ratio, color=source)) +
+  geom_col(aes(fill=source), position = "identity" ,   alpha=0.2) +
+  geom_line() + 
+  theme(
+      legend.position = "bottom",
+      legend.title = element_blank(),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    ) +
+  xlab("Hour of the day") +
+  ylab("Traffic volume %")
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/bikeTrafficOveral.png",
+       width= 7, height = 6)
+```
+
 
 Calculating GEH Statistic for Bike traffic
 
