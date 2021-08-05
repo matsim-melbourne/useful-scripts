@@ -3,4 +3,26 @@ Run the event2csv.sh script convert MATSim's output XML into:
 - trip_links.txt: cols: Time, Type (left/entered link), vehicle ID, Link ID
 - vehicle_trip.txt: cols: Time, Type (vehicle leaves/entres traffic), Person ID, Link ID, Vehicle ID, network mode
 - person_act.txt: cols: Time, Type (act start/end), Person ID, Link ID, actType
- 
+
+
+
+Make sure to install xmlstarlet:
+
+```bash
+sudo apt install xmlstarlet
+```
+
+
+
+Converting the events and plans to csv (note that ';' is used instead of ','):
+
+```bash
+./parseEvents.sh \
+  --input='../example-project/output/example (car,bike,pt,tele-walk)/output_events.xml.gz' \
+  --output='./output_events.csv.gz'
+
+./parsePlans.sh \
+  --input='../example-project/output/example (car,bike,pt,tele-walk)/output_plans.xml.gz' \
+  --output='./output_plans.csv.gz'
+```
+
