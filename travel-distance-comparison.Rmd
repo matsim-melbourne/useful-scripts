@@ -15,6 +15,7 @@ Please note Google Maps API is NOT a free service - be aware of the potential co
 ```{r setup, include=FALSE}
 library(mapsapi)
 library(sf)
+library(lubridate)
 library(tidyverse)
 apikey <- readLines("./api/google.key")
 
@@ -23,21 +24,12 @@ apikey <- readLines("./api/google.key")
 ```{r Reading input from simulation}
 
 
-simOutputTrips <- read_delim(gzfile("data/simOutput/10pct/exp1-noMc-100iters/output_trips.csv.gz"),
+simOutputTrips <- read_delim(gzfile("data/simOutput/10pct/exp6_withMC_withSP/output_trips.csv.gz"),
                       delim=";") %>% 
   # Removing trips with zero distance
   filter(traveled_distance>0) 
 
 # Adding time of the day and date to the trips
-```
-Sampling for each valid mode (adjust n)
-
-```{r sampling the trips}
-n <- 10
-tripsSampled <- simOutputTrips %>% 
-  group_by(longest_distance_mode) %>% 
-  slice_sample(n = n) %>% 
-  ungroup()
 ```
 
 Getting the distance and time for sampled trips for Google API
@@ -47,12 +39,28 @@ Getting the distance and time for sampled trips for Google API
 modesMap=tibble(modes=c("pt","car","walk","bicycle"),
            gMode=c("transit","driving","walking", "bicycling"))
 
-tripsWithDepTime <- tripsSampled %>% 
+tripsWithDepTime <- simOutputTrips %>% 
   left_join(modesMap, by=c("longest_distance_mode"="modes")) %>% 
   mutate(depDate = paste0(Sys.Date() + 1, " ", dep_time)) %>% 
-  mutate(depDate = as.POSIXct(depDate,format="%Y-%m-%d %H:%M:%OS",tz = Sys.timezone())) 
+  mutate(depDate = as.POSIXct(depDate,format="%Y-%m-%d %H:%M:%OS",
+                              tz = Sys.timezone())) %>% 
+  filter(!is.na(depDate))
+  
 
-origins <- tripsWithDepTime %>% 
+```
+
+Sampling for each valid mode (adjust n)
+
+```{r sampling the trips}
+
+n <- 50
+
+tripsSampled <- tripsWithDepTime %>% 
+  group_by(longest_distance_mode) %>% 
+  slice_sample(n = n) %>% 
+  ungroup()
+
+origins <- tripsSampled %>% 
   dplyr::select(trip_id,start_x, start_y) %>% 
   mutate(GEOMETRY=paste0("POINT(",start_x," ",start_y,")")) %>%
   st_as_sf(wkt = "GEOMETRY", crs = 28355) %>% 
@@ -60,7 +68,7 @@ origins <- tripsWithDepTime %>%
   st_sf() %>% 
   st_transform(4283)
 
-destinations <- tripsWithDepTime %>% 
+destinations <- tripsSampled %>% 
   dplyr::select(trip_id,end_x, end_y) %>% 
   mutate(GEOMETRY=paste0("POINT(",end_x," ",end_y,")")) %>%
   st_as_sf(wkt = "GEOMETRY", crs = 28355) %>% 
@@ -70,27 +78,29 @@ destinations <- tripsWithDepTime %>%
 
 ```
 
+
+
+
 ## Assigning the Google Time and Distance to the Sample
 
-```{r}
-
+```{r, warning=FALSE, message=FALSE}
 i=1
-for(i in 1:nrow(tripsWithDepTime)){
+for(i in 1:nrow(tripsSampled)){
 # for(i in 1:10){
-  if(i%%10 == 0) print(paste0("trip number ",i," out of ", nrow(tripsWithDepTime), " trips"))
+  if(i%%10 == 0) print(paste0("trip number ",i," out of ", nrow(tripsSampled), " trips"))
   route=mapsapi::mp_matrix(origins = origins[i,"GEOMETRY"],
                            destinations = destinations[i,"GEOMETRY"],
-                           mode = tripsWithDepTime$gMode[i],
-                           departure_time = tripsWithDepTime$depDate[i],
+                           mode = tripsSampled$gMode[i],
+                           departure_time = tripsSampled$depDate[i],
                            traffic_model="best_guess",
                            key = apikey)
-  tripsWithDepTime[i,"time_google"] <- route %>% mp_get_matrix(value = c("duration_s")) %>% as.numeric()
-  tripsWithDepTime[i,"distance_google"] <- route %>% mp_get_matrix(value = c("distance_m")) %>% as.numeric()
+  tripsSampled[i,"time_google"] <- route %>% mp_get_matrix(value = c("duration_s")) %>% as.numeric()
+  tripsSampled[i,"distance_google"] <- route %>% mp_get_matrix(value = c("distance_m")) %>% as.numeric()
 }
 ```
 
 ```{r}
-tripsProcessed <- tripsWithDepTime %>% 
+tripsProcessed <- tripsSampled %>% 
   mutate(trav_time=seconds(trav_time)) %>% 
   mutate(time_google=seconds(time_google)) %>% 
   dplyr::select(person, trip_number, depDate, mode=longest_distance_mode,
@@ -99,8 +109,8 @@ tripsProcessed <- tripsWithDepTime %>%
   mutate(`Travel Distance Difference`=100*(distance_simulation-distance_google)/distance_google) %>%
   mutate(`Travel Time Difference`=100*(time_simulation-time_google)/time_google) 
 
-write_csv(tripsProcessed, "tripsProcessed.csv")
-
+write_csv(tripsProcessed, "tripsProcessed_exp6_withMC_withSP_n50.csv")
+tripsProcessed <- read_csv("tripsProcessed_exp6_withMC_withSP_n50.csv")
 ```
 
 ## Comparing the time and distance
@@ -111,8 +121,23 @@ write_csv(tripsProcessed, "tripsProcessed.csv")
 
 tripsProcessed %>% 
   filter(`Travel Time Difference`<1000) %>%
-  ggplot(aes(x=mode, y=`Travel Time Difference`,color=mode)) +
-  geom_violin()
+  mutate(`Travel Mode`=case_when(mode=="car" ~ "Driving",
+                                 mode=="pt" ~ "PT",
+                                 mode=="bicycle" ~ "Cycling",
+                                 mode=="walk" ~ "Walking",
+                                 TRUE ~ "NA")) %>% 
+  ggplot(aes(x=`Travel Mode`, y=`Travel Time Difference`,color=`Travel Mode`, 
+             fill= `Travel Mode`)) +
+  geom_boxplot(alpha=0.8) +
+  scale_color_brewer(palette = "Dark2") +
+  scale_fill_brewer(palette = "Dark2") +
+    guides( colour = guide_legend()) +
+    theme(
+      legend.position ="none"
+    )
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/travTimeDiff.png",
+      width = 5, height = 5)
 
 ```
 
@@ -122,9 +147,24 @@ tripsProcessed %>%
 
 
 tripsProcessed %>% 
-  # filter(`Travel Distance Difference`<1000) %>%
-  ggplot(aes(x=mode, y=`Travel Distance Difference`,color=mode)) +
-  geom_violin()
+  filter(`Travel Distance Difference`<500) %>%
+  mutate(`Travel Mode`=case_when(mode=="car" ~ "Driving",
+                                 mode=="pt" ~ "PT",
+                                 mode=="bicycle" ~ "Cycling",
+                                 mode=="walk" ~ "Walking",
+                                 TRUE ~ "NA")) %>% 
+  ggplot(aes(x=`Travel Mode`, y=`Travel Distance Difference`,color=`Travel Mode`, 
+             fill= `Travel Mode`)) +
+  geom_boxplot(alpha=0.8) +
+  scale_color_brewer(palette = "Dark2") +
+  scale_fill_brewer(palette = "Dark2") +
+    guides( colour = guide_legend()) +
+    theme(
+      legend.position ="none"
+    )
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/travDistDiff.png",
+      width = 5, height = 5)
 
 
 ```
