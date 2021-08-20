@@ -65,9 +65,12 @@ do
     CURRENT_ID="${LINE[0]}"
   fi
   # if it's an activity line
-  if [ "${#LINE[@]}" = 5 ] ; then
+  # echo "${#LINE[@]} - ${LINE[@]}"
+  if [ "${#LINE[@]}" = 5 ] && [ "${LINE[1]}" != '' ] ; then
     echo '    <activity type="'${LINE[1]}'" x="'${LINE[2]}'" y="'${LINE[3]}'" end_time="'${LINE[4]}'"/>' >> $OUTPUT
-  else # if it's a leg line
+  fi
+  # if it's a leg line
+  if [ "${#LINE[@]}" = 6 ] ; then 
     echo '    <leg mode="'${LINE[5]}'"/>' >> $OUTPUT
   fi
 done

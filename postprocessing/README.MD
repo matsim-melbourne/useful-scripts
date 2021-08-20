@@ -26,3 +26,15 @@ Converting the events and plans to csv (note that ';' is used instead of ','):
   --output='./output_plans.csv.gz'
 ```
 
+onverting the events and plans to csv (note that ';' is used instead of ','):
+
+```bash
+./demandXMLtoCSV.sh \
+  --input='plan.xml' \
+  --output='output_events.csv'
+
+./demandCSVtoXML.sh \
+  --input='output_events.csv' \
+  --output='output_events.xml'
+```
+
