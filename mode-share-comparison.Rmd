@@ -23,17 +23,18 @@ This is code compares the mode share of trips from Simulation output to
 
 ```{r reading sim outputs}
 
-simOutputTrips <- read_delim(gzfile("data/simOutput/10pct/exp6_withMC_withSP/output_trips.csv.gz"),
+simOutputTrips <- read_delim(gzfile("data/simOutputs/10pct/CalibRun6/output_trips.csv.gz"),
                       delim=";") %>% 
   # Removing trips with zero distance
-  filter(traveled_distance>0) 
+  filter(traveled_distance>0) %>%   
+  filter(longest_distance_mode!="walk") %>% 
+  mutate(longest_distance_mode=ifelse(longest_distance_mode=="netwalk", "walk", longest_distance_mode)) 
 
 ```
 
 ```{r}
 
 simOutputTripsCounted <- simOutputTrips %>% 
-  # Counting number of trips with each mode
   count(mode=longest_distance_mode) %>% 
   # Getting the pct
   mutate(pct=100*n/sum(n)) 
@@ -43,7 +44,7 @@ simOutputTripsCounted <- simOutputTrips %>%
 ### Simulation input processing
 
 ```{r}
-demandOutputDir <- "~/github/matsim-melbourne/demand/output-v1.1-10pct/"
+demandOutputDir <- "data/demand/output-Sep10-10pct/"
 simInputTrips <- read_csv(paste0(demandOutputDir,"7.time/plan.csv")) %>% 
   # filtering those without mode
   filter(!is.na(ArrivingMode)) %>%
