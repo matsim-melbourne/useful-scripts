@@ -23,9 +23,12 @@ library(ggspatial)
 
 Here I am comparing Origin and Destinations to Census Journey to work
 
-```{r cars}
+```{r}
 
-outputDir <- "~/github/matsim-melbourne/demand/output-v1.1-10pct/"
+boundaries <- read_sf("~/ownCloud/Data/ABS_Boundaries/1270055001_sa1_2016_aust_shape/SA1_2016_AUST.shp") %>% 
+  st_transform(28355)
+
+outputDir <- "~/github/matsim-melbourne/demand/output-Sep10-10pct/"
 plans <- read_csv(paste0(outputDir,"7.time/plan.csv"))
 attribs <- rbind(read_csv(paste0(outputDir,"3.match/match_1.csv")),
                  read_csv(paste0(outputDir,"3.match/match_2.csv")),
@@ -40,88 +43,7 @@ glimpse(plansWithAttrib)
 
 ```
 
-## Activity location map
-
-SA2
-
-```{r}
-
-actLocationsSA2 <- plans %>% 
-  distinct(x,y,LocationType, .keep_all = T) %>% 
-  mutate(SA1_MAINCODE_2016=as.character(SA1_MAINCODE_2016)) %>% 
-  left_join(st_drop_geometry(boundaries[,c("SA1_MAIN16","SA2_NAME16")]), by = c("SA1_MAINCODE_2016"="SA1_MAIN16")) %>% 
-  group_by(SA2_NAME16, LocationType) %>% 
-  summarise(n=n()) %>% 
-  ungroup() %>% 
-  mutate(n=ifelse(is.na(n), 0, n)) %>% 
-  filter(!is.na(LocationType)) 
-  
-SA2sMap <- boundaries %>%  filter(SA2_NAME16%in%actLocationsSA2$SA2_NAME16) %>% 
-  group_by(SA2_NAME16) %>% 
-  summarise(geometry=st_union(geometry)) 
-
-homeLocationsSA2 <- actLocationsSA2 %>% 
-  filter(LocationType=="home") %>% 
-  left_join(SA2sMap, by = "SA2_NAME16") %>% 
-  st_as_sf()
-
-homeLocationsSA2 %>% 
-  st_centroid() %>% 
-  mutate(n_cut = cut_interval(n, n = 5)) %>% 
-  ggplot() +
-  annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6)+
-  geom_sf(aes(size=n, colour=n )) +
-  scale_radius(name="# home destinations",  range = c(0.1,4))  +
-  scale_color_viridis_c(name="# home destinations", trans = "sqrt", alpha = .6, 
-                        option = "magma") 
-
-ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/homeLocationsSA2.png")
-write_sf(homeLocationsSA2, "actLocationsSA2.sqlite", layer="Home",delete_layer = T)
-
-workLocationsSA2 <- actLocationsSA2 %>% 
-  filter(LocationType=="work") %>% 
-  left_join(SA2sMap, by = "SA2_NAME16") %>% 
-  st_as_sf()
-
-workLocationsSA2 %>%
-  st_centroid() %>%
-  mutate(n_cut = cut_interval(n, n = 5)) %>%
-  ggplot() +
-  annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6)+
-  geom_sf(aes(size=n_cut, colour=n_cut )) #+
-  # scale_color_viridis_c(name="# work destinations", trans = "sqrt", alpha = .6,
-  #                       option = "magma") +
-  # scale_radius(name="# work destinations", range = c(0.5,6))
-
-mybreaks <- c(20, 40, 80, 100)
-library(viridis)
-
-workLocationsSA2 %>%
-  st_centroid() %>%
-  # mutate(n_cut = cut_interval(n, n = 5)) %>%
-  ggplot() +
-  annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6)+
-  geom_sf(aes( size=n, colour=n, alpha=n ))  +
-  scale_color_viridis(option="magma", trans="sqrt", breaks=mybreaks, name="Work destinations" ) +
-  scale_alpha_continuous(name="Work destinations", trans="sqrt", range=c(0.1, .9), breaks=mybreaks) +
-  scale_size_continuous(name="Work destinations", trans="sqrt",  range=c(0.3, 5), breaks=mybreaks) +
-    theme_void() + 
-    guides( colour = guide_legend()) +
-    theme(
-      legend.position = c(0.85, 0.85),
-      text = element_text(color = "#22211d"),
-      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
-      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
-      legend.background = element_rect(fill = "#f5f5f2", color = NA)
-    )
-
-ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/workLocationsSA2.png")
-write_sf(workLocationsSA2, "actLocationsSA2.sqlite", layer="Work",delete_layer = T)
-
-```
-
-
-SA3 Home location
+## Activity location maps
 
 ```{r}
 
@@ -139,37 +61,28 @@ SA3sMap <- boundaries %>%  filter(SA3_NAME16%in%actLocationsSA3$SA3_NAME16) %>%
   group_by(SA3_NAME16) %>% 
   summarise(geometry=st_union(geometry)) 
 
-homeLocationsSA3 <- actLocationsSA3 %>% 
+
+```
+
+SA3 Home location
+
+```{r}
+
+mybreaks1 <- c(1000, 2000, 3000, 4000)
+
+actLocationsSA3 %>% 
   filter(LocationType=="home") %>% 
   left_join(SA3sMap, by = "SA3_NAME16") %>% 
-  st_as_sf()
-
-# homeLocationsSA3 %>%
-#   st_centroid() %>%
-#   mutate(n_cut = cut_interval(n, n = 5)) %>%
-#   ggplot() +
-#   annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6)+
-#   geom_sf(aes(size=n, colour=n )) +
-#   scale_radius(name="# home destinations",  range = c(0.1,4))  +
-#   scale_color_viridis_c(name="# home destinations", trans = "sqrt", alpha = .6,
-#                         option = "magma")
-
-mybreaks1 <- c(1000, 2000, 3000, 4000, 5000)
-
-homeLocationsSA3 %>%
-  st_centroid() %>%
-  # mutate(n_cut = cut_interval(n, n = 5)) %>%
+  st_as_sf() %>% 
   ggplot() +
   annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6)+
-  geom_sf(data = SA3sMap) +
-  geom_sf(aes( size=n, colour=n ))  +
-  scale_color_viridis(option="magma", trans="sqrt", breaks=mybreaks1, name="Home destinations" ) +
-  scale_alpha_continuous(name="Home destinations", trans="sqrt", range=c(0.1, .9), breaks=mybreaks1) +
-  scale_size_continuous(name="Home destinations", range=c(0.3, 8), breaks=mybreaks1) +
+  geom_sf(aes(fill=n ),alpha=0.8)  +
+  scale_fill_viridis(option="magma", trans="sqrt", breaks=mybreaks1, name="Count" ) +
     theme_void() + 
     guides( colour = guide_legend()) +
     theme(
-      legend.position = c(0.85, 0.85),
+      legend.title =element_blank(),
+      legend.position = c(0.1, 0.2),
       text = element_text(color = "#22211d"),
       plot.background = element_rect(fill = "#f5f5f2", color = NA), 
       panel.background = element_rect(fill = "#f5f5f2", color = NA), 
@@ -177,8 +90,7 @@ homeLocationsSA3 %>%
     )
 
 ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/homeLocationsSA3.png",
-       width = 7, height = 7)
-write_sf(homeLocationsSA3, "actLocationsSA3.sqlite", layer="Home",delete_layer = T)
+       width = 3.5, height = 3.5)
 
 ```
 
@@ -186,37 +98,25 @@ SA3 work location
 
 ```{r}
 
-workLocationsSA3 <- actLocationsSA3 %>% 
+mybreaks <- c(50, 200, 500, 900)
+
+actLocationsSA3 %>% 
   filter(LocationType=="work") %>% 
   left_join(SA3sMap, by = "SA3_NAME16") %>% 
-  st_as_sf()
-
-# workLocationsSA3 %>%
-#   st_centroid() %>%
-#   mutate(n_cut = cut_interval(n, n = 5)) %>%
-#   ggplot() +
-#   annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6)+
-#   geom_sf(aes(size=n_cut, colour=n_cut )) #+
-  # scale_color_viridis_c(name="# work destinations", trans = "sqrt", alpha = .6,
-  #                       option = "magma") +
-  # scale_radius(name="# work destinations", range = c(0.5,6))
-
-mybreaks <- c(50, 100, 150, 200, 250, 300)
-
-workLocationsSA3 %>%
-  st_centroid() %>%
-  # mutate(n_cut = cut_interval(n, n = 5)) %>%
+  st_as_sf() %>%
   ggplot() +
   annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6)+
-  geom_sf(data = SA3sMap) +
-  geom_sf(aes( size=n, colour=n ))  +
-  scale_color_viridis(option="magma", trans="sqrt", breaks=mybreaks, name="Work destinations" ) +
-  scale_alpha_continuous(name="Work destinations", trans="sqrt", range=c(0.1, .9), breaks=mybreaks) +
-  scale_size_continuous(name="Work destinations", range=c(0.3, 8), breaks=mybreaks) +
+  # geom_sf(data = SA3sMap) +
+  geom_sf(aes(fill=n ),alpha=0.8)  +
+  # scale_color_viridis(option="magma", trans="sqrt", breaks=mybreaks, name="Work destinations" ) +
+  scale_fill_viridis(option="magma", trans="sqrt", breaks=mybreaks, name="Count" ) +
+  # scale_alpha_continuous(name="Work destinations", trans="sqrt", range=c(0.1, .9), breaks=mybreaks) +
+  # scale_size_continuous(name="Work destinations", range=c(0.3, 8), breaks=mybreaks) +
     theme_void() + 
     guides( colour = guide_legend()) +
     theme(
-      legend.position = c(0.85, 0.85),
+      legend.title =element_blank(),
+      legend.position = c(0.1, 0.2),
       text = element_text(color = "#22211d"),
       plot.background = element_rect(fill = "#f5f5f2", color = NA), 
       panel.background = element_rect(fill = "#f5f5f2", color = NA), 
@@ -224,10 +124,117 @@ workLocationsSA3 %>%
     )
 
 ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/workLocationsSA3.png",
-       width = 7, height = 7)
-write_sf(workLocationsSA3, "actLocationsSA3.sqlite", layer="Work",delete_layer = T)
+       width = 3.5, height = 3.5)
 
 ```
+
+
+SA3 Education map
+
+
+```{r}
+
+mybreaks <- c(50, 100, 200)
+
+actLocationsSA3 %>% 
+  filter(LocationType=="education") %>% 
+  left_join(SA3sMap, by = "SA3_NAME16") %>% 
+  st_as_sf() %>%
+  ggplot() +
+  annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6)+
+  # geom_sf(data = SA3sMap) +
+  geom_sf(aes(fill=n ),alpha=0.8)  +
+  # scale_color_viridis(option="magma", trans="sqrt", breaks=mybreaks, name="Work destinations" ) +
+  scale_fill_viridis(option="magma", trans="sqrt", breaks=mybreaks) +
+  # scale_alpha_continuous(name="Work destinations", trans="sqrt", range=c(0.1, .9), breaks=mybreaks) +
+  # scale_size_continuous(name="Work destinations", range=c(0.3, 8), breaks=mybreaks) +
+    theme_void() + 
+    guides( colour = guide_legend()) +
+    theme(
+      legend.title =element_blank(),
+      legend.position = c(0.1, 0.2),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/educationLocationsSA3.png",
+       width = 3.5, height = 3.5)
+
+```
+
+
+SA3 park map
+
+```{r}
+
+mybreaks <- c(50, 250, 500)
+
+actLocationsSA3 %>% 
+  filter(LocationType=="park") %>% 
+  left_join(SA3sMap, by = "SA3_NAME16") %>% 
+  st_as_sf() %>%
+  ggplot() +
+  annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6)+
+  # geom_sf(data = SA3sMap) +
+  geom_sf(aes(fill=n ),alpha=0.8)  +
+  # scale_color_viridis(option="magma", trans="sqrt", breaks=mybreaks, name="Work destinations" ) +
+  scale_fill_viridis(option="magma", trans="sqrt", breaks=mybreaks) +
+  # scale_alpha_continuous(name="Work destinations", trans="sqrt", range=c(0.1, .9), breaks=mybreaks) +
+  # scale_size_continuous(name="Work destinations", range=c(0.3, 8), breaks=mybreaks) +
+    theme_void() + 
+    guides( colour = guide_legend()) +
+    theme(
+      legend.title =element_blank(),
+      legend.position = c(0.1, 0.2),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/parkLocationsSA3.png",
+       width = 3.5, height = 3.5)
+
+```
+
+
+SA3 commercial map
+
+
+```{r}
+
+mybreaks <- c(50, 350, 850)
+
+actLocationsSA3 %>% 
+  filter(LocationType=="commercial") %>% 
+  left_join(SA3sMap, by = "SA3_NAME16") %>% 
+  st_as_sf() %>%
+  ggplot() +
+  annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6)+
+  # geom_sf(data = SA3sMap) +
+  geom_sf(aes(fill=n ),alpha=0.8)  +
+  # scale_color_viridis(option="magma", trans="sqrt", breaks=mybreaks, name="Work destinations" ) +
+  scale_fill_viridis(option="magma", trans="sqrt", breaks=mybreaks) +
+  # scale_alpha_continuous(name="Work destinations", trans="sqrt", range=c(0.1, .9), breaks=mybreaks) +
+  # scale_size_continuous(name="Work destinations", range=c(0.3, 8), breaks=mybreaks) +
+    theme_void() + 
+    guides( colour = guide_legend()) +
+    theme(
+      legend.title =element_blank(),
+      legend.position = c(0.1, 0.2),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/commercialLocationsSA3.png",
+       width = 3.5, height = 3.5)
+
+```
+
 
 
 ## Trips to work OD analysis
@@ -247,8 +254,7 @@ glimpse(tripsToWork)
 Aggregating ODs at SA3
 
 ```{r}
-boundaries <- read_sf("~/ownCloud/Data/ABS_Boundaries/1270055001_sa1_2016_aust_shape/SA1_2016_AUST.shp") %>% 
-  st_transform(28355)
+
 boundariesSA2 <- st_drop_geometry(boundaries[,c("SA2_MAIN16","SA3_NAME16")]) %>% 
   distinct()
 
@@ -290,6 +296,7 @@ censusOd <- read_csv("~/ownCloud/Data/ABS_Census/SA3 (UR) and SA3 (POW).csv", sk
   dplyr::select(-Counting, -X5)  %>%
   filter(HomeSA3!="Total" & DestinationSA3!="Total") %>% 
   filter(paste0(HomeSA3,"_",DestinationSA3) %in% ODPairs$pairs) %>%  
+  
   # filter(HomeSA3%in%tripsToWorkSA3$HomeSA3) %>% 
   # filter(DestinationSA3%in%tripsToWorkSA3$DestinationSA3) %>% 
   group_by(HomeSA3) %>% 
@@ -318,18 +325,62 @@ ODPcts %>%
 
 ```{r}
 ODError <- tripsToWorkSA3 %>% 
+  # filter(DemandTripPctPerHomeSA3>1) %>% # I need to look into this
   left_join(censusOd, by = c("HomeSA3","DestinationSA3")) %>%  
-  filter(CensusTripPerHomeSA3!=0) %>% # I need to look into this
+  filter(CensusTripPctPerHomeSA3>1 | DemandTripPctPerHomeSA3>1) %>% # I need to look into this
+  # filter(HomeSA3!="Stonnington - West" & DestinationSA3!="Manningham - East") %>% 
   mutate(deltaSq=abs(DemandTripPctPerHomeSA3-CensusTripPctPerHomeSA3)/CensusTripPctPerHomeSA3) %>% 
   group_by(HomeSA3) %>%
   # summarise(n=n())
-  summarise(n=n(),mae=(1/n)*(sum(deltaSq))) 
+  summarise(n=n(),mape=(100/n)*(sum(deltaSq))) 
 
 
-ODError$HomeSA3 <- factor(ODError$HomeSA3, levels = ODError$HomeSA3[order(ODError$mae)])
+ODError$HomeSA3 <- factor(ODError$HomeSA3, levels = ODError$HomeSA3[order(ODError$mape)])
 ODError %>% 
-  arrange(desc(mae)) %>% 
-  ggplot(aes(x=mae,y=HomeSA3, fill=mae)) +
+  arrange(desc(mape)) %>% 
+  ggplot(aes(x=mape,y=HomeSA3, fill=mape)) +
+  geom_col() +
+  scale_fill_viridis_c()
+
+```
+
+
+```{r}
+
+SA3sMap <- boundaries %>% filter(SA3_NAME16%in%tripsToWorkSA3$HomeSA3) %>% 
+  group_by(SA3_NAME16) %>% 
+  summarise(geometry=st_union(geometry)) 
+
+SA3sMap %>% 
+  left_join(ODError, by=c("SA3_NAME16"="HomeSA3")) %>% 
+  ggplot() +
+  annotation_map_tile(type="osmgrayscale",zoom=9) +
+  geom_sf(aes(fill = mape), alpha=0.8) +
+  scale_fill_viridis_c(option="magma", trans = "sqrt", name= "MAPE") 
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/od-mape.png")
+
+```
+
+
+# WAPE
+
+
+```{r}
+ODError2 <- tripsToWorkSA3 %>% 
+  # filter(DemandTripPctPerHomeSA3>1) %>% # I need to look into this
+  left_join(censusOd, by = c("HomeSA3","DestinationSA3")) %>%  
+  # filter(CensusTripPctPerHomeSA3>1 | DemandTripPctPerHomeSA3>1) %>% # I need to look into this
+  # filter(HomeSA3!="Stonnington - West" & DestinationSA3!="Manningham - East") %>% 
+  mutate(delta=abs(DemandTripPerHomeSA3-CensusTripPerHomeSA3)) %>% 
+  group_by(HomeSA3) %>%
+  summarise(n=n(),wape=(sum(delta)/sum(CensusTripPerHomeSA3))) 
+  
+
+ODError2$HomeSA3 <- factor(ODError2$HomeSA3, levels = ODError2$HomeSA3[order(ODError2$wape)])
+ODError2 %>% 
+  arrange(desc(wape)) %>% 
+  ggplot(aes(x=wape,y=HomeSA3, fill=wape)) +
   geom_col() +
   scale_fill_viridis_c()
 
@@ -342,11 +393,26 @@ SA3sMap <- boundaries %>% filter(SA3_NAME16%in%tripsToWorkSA3$HomeSA3) %>%
   summarise(geometry=st_union(geometry)) 
 
 SA3sMap %>% 
-  left_join(ODError, by=c("SA3_NAME16"="HomeSA3")) %>% 
+  left_join(ODError2, by=c("SA3_NAME16"="HomeSA3")) %>% 
   ggplot() +
   annotation_map_tile(type="osmgrayscale",zoom=9) +
-  geom_sf(aes(fill = mae)) +
-  scale_fill_viridis_c(trans = "sqrt", alpha = .5, name= "MAE") 
+  geom_sf(aes(fill = wape), alpha=0.8) +
+  scale_fill_viridis_c(option="magma", trans = "sqrt", name= "WAPE") 
 
-ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/od-mae.png")
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/od-wape.png")
 ```
+
+## Home trips count
+
+```{r}
+
+tripsToWorkSA3 %>% 
+  # filter(DemandTripPctPerHomeSA3>1) %>% # I need to look into this
+  left_join(censusOd, by = c("HomeSA3","DestinationSA3")) %>% 
+  group_by(HomeSA3) %>% 
+  summarise(censusHomeSa3=sum(CensusTripPerHomeSA3),
+            demandHomeSa3=sum(DemandTripPerHomeSA3))
+
+```
+
+
