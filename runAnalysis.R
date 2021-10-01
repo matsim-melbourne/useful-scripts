@@ -2,11 +2,11 @@ processObsData <- T
 processSimData <- T
 roadTrafficAnalysis <- T
 modeShareAnalysis <- T
-modeShareAnalysis <- T
+travDistAnalysis <- F
 
 # Building the folder structure
 # Change the dir name based on your simulation run
-simDesc <- "10pct_noMc_bicycle_v2"
+simDesc <- "10pct_withMc_Sep29"
 outputDir <- paste0("./calibrationOutputs/", simDesc,"/")
 if (!dir.exists(outputDir)) dir.create(outputDir)
 
@@ -34,7 +34,7 @@ if(roadTrafficAnalysis) rmarkdown::render("road-traffic-comparison.Rmd",
 # Running the analysis for travel distance and time
 # This code VISTA and also simulation input and outputs data 
 # Make sure to download/place them in correct directoris 
-if(modeShareAnalysis) rmarkdown::render("travel-distance-comparison.Rmd",
+if(travDistAnalysis) rmarkdown::render("travel-distance-comparison.Rmd",
                                      output_dir=outputDir, quiet = F)
 
 

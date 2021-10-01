@@ -1,0 +1,347 @@
+---
+title: "input-network-analysis"
+author: "jafshin"
+date: "24/07/2021"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(ggspatial)
+library(sf)
+library(vroom)
+library(fs)
+source("./functions/convertXMLNetwork.R")
+
+```
+
+## Intro
+
+Here is the code to create some visualisation for papers.
+
+```{r}
+
+if (file.exists("./data/networks/networkConverted.sqlite")) {
+  networkLinks <- st_read("./data/networks/networkConverted.sqlite", 
+                          layer = "links", quiet=T)
+  networkNodes <- st_read("./data/networks/networkConverted.sqlite", 
+                          layer = "nodes", quiet=T)
+}else{
+  networkConverted <- convertXMLNetowrk(xmlFile = "./data/simOutput/output_network.xml",
+                                        netCRS = 28355)
+  networkNodes <- networkConverted[[1]]
+  networkLinks <- networkConverted[[2]]
+}
+
+# networkLinks <- st_read("./data/networks/network_noPT_withZ_v1.2_Jul28.sqlite",
+#                           layer = "links", quiet=T)
+# networkNodes <- st_read("./data/networks/network_noPT_withZ_v1.2_Jul28.sqlite",
+#                           layer = "nodes", quiet=T)
+```
+
+
+
+```{r}
+boundaries <- read_sf("~/ownCloud/Data/ABS_Boundaries/1270055001_sa1_2016_aust_shape/SA1_2016_AUST.shp") %>% 
+  st_transform(28355)
+SA3sMap <- boundaries %>% 
+  filter(GCC_CODE16=="2GMEL") %>% 
+  group_by(SA3_NAME16) %>% 
+  summarise(geometry=st_union(geometry)) 
+
+```
+
+## Plotting Greater Melbourne
+
+plotting PT
+
+```{r}
+
+networkLinks <- networkLinks %>% 
+  mutate(`Travel mode`=case_when(modes=="pt" ~ "Public Transport",
+                                 (!str_detect(modes, "car")) ~ "Non-motorised",
+                                 TRUE ~ "Mixed traffic")) 
+
+```
+
+```{r}
+networkLinks %>% 
+  filter(modes=="pt") %>% 
+  ggplot() +
+  annotation_map_tile(type="osmgrayscale", zoom = 9) +
+  geom_sf(color="royalblue4", alpha=0.7, show.legend = "line") +
+  # scale_color_viridis_d(option="magma") +
+      theme_void() + 
+    # guides( colour = guide_legend()) +
+    theme(
+      # legend.title = element_blank(),
+      legend.position = "none",
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/gMelbPT.png",
+       width = 7, height = 7)
+
+```
+
+
+```{r}
+networkLinks %>% 
+  filter(modes!="pt") %>% 
+  ggplot() +
+  annotation_map_tile(type="osmgrayscale", zoom = 9) +
+  geom_sf(color="royalblue4", alpha=0.7, show.legend = "line") +
+  # scale_color_viridis_d(option="magma") +
+      theme_void() + 
+    # guides( colour = guide_legend()) +
+    theme(
+      # legend.title = element_blank(),
+      legend.position = "none",
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/gMelbRoad.png",
+       width = 7, height = 7)
+
+```
+
+## Plotting City of Melbourne
+
+```{r}
+
+rbind ({SA3sMap %>% st_union() %>% st_sf() %>% mutate(Area="Rest of Greater Melbourne")},
+       {filter(SA3sMap,SA3_NAME16=="Melbourne City") %>% dplyr::select(-SA3_NAME16) %>% mutate(Area="City of Melbourne")} ) %>% 
+  mutate(Area=factor(Area, levels = c("Rest of Greater Melbourne","City of Melbourne"))) %>% 
+  ggplot() +
+  annotation_map_tile(type="osmgrayscale", alpha=0.5, zoom = 9) +
+  geom_sf(aes(fill=Area,alpha=Area) )+
+  scale_fill_brewer(palette = "Dark2") +
+  # geom_sf(data = , fill="#F8766D")+
+  # scale_color_viridis_d(option="magma") +
+      theme_void() + 
+    guides( colour = guide_legend()) +
+    theme(
+      legend.title = element_blank(),
+      # legend.position = "bottom",
+      legend.position = c(0.2, 0.15),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+
+ggsave("~/Dropbox/Apps/Overleaf/NetworkPaper/figs/comVsGmelb.png",
+       width =5, height = 5)
+```
+
+
+```{r}
+cMelbMap <- SA3sMap %>% 
+  filter(SA3_NAME16 ==  "Melbourne City") %>% 
+  st_buffer(200)
+  # plot(cMelbMap)
+
+cMelbLinks<- networkLinks %>% 
+  # removing the pt links
+  filter(modes!="pt") %>% 
+  st_intersection(cMelbMap) 
+
+cMelbNodes<- networkNodes %>% 
+  # removing the pt links
+  # filter(modes!="pt") %>% 
+  st_intersection(cMelbMap) 
+
+```
+
+
+```{r}
+
+cMelbLinksRestructured <- cMelbLinks %>% 
+  mutate(`Bikeway Type` = case_when(cycleway=="bikepath" ~ "Bike path",
+                                    cycleway=="shared_path" ~ "Shared bike path",
+                                    cycleway=="seperated_lane" ~ "Separated bike lane",
+                                    cycleway=="simple_lane" ~ "Simple bike lane",
+                                    cycleway=="shared_street" ~ "Shared street",
+                                    is.na(cycleway) ~ "Mixed traffic",
+                                    TRUE ~ "NA")) %>% 
+  mutate(freespeed=as.numeric(freespeed)) %>% 
+  mutate(speedLimit=round(freespeed*3.6, 1))
+cMelbLinksRestructured$`Bikeway Type` <- factor(cMelbLinksRestructured$`Bikeway Type`, 
+                                           levels = c("Bike path",
+                                                      "Shared bike path",
+                                                      "Separated bike lane",
+                                                      "Simple bike lane",
+                                                      "Shared street",
+                                                      "Mixed traffic"))
+
+```
+
+```{r}
+cMelbLinksRestructured %>% 
+  filter(`Bikeway Type`!="Mixed traffic") %>% 
+  ggplot() +
+  annotation_map_tile(type="osmgrayscale", zoom = 13, alpha = 0.2) +
+  geom_sf(aes(color=`Bikeway Type`), show.legend = "line") +
+  geom_sf(data = filter(cMelbLinksRestructured, `Bikeway Type`=="Mixed traffic"), color="#000000", alpha=0.1) +
+  # scale_color_viridis_d(option=) +
+  scale_color_brewer(palette = "Dark2") +
+      theme_void() + 
+    guides( colour = guide_legend()) +
+    theme(
+      legend.position = c(0.2, 0.15),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+ggsave("~/Dropbox/Apps/Overleaf/NetworkPaper/figs/comBikeway.png",
+       width = 5, height = 5)
+```
+
+
+
+```{r}
+
+ggplot(cMelbLinksRestructured) +
+  annotation_map_tile(type="osmgrayscale", zoom = 13, alpha = 0.2) +
+  geom_sf(aes(color=modes), alpha=0.7, show.legend = "line") +
+  scale_color_brewer(palette = "Dark2", name="Permitted modes") +
+  # scale_color_viridis_d(option="magma", name="Permitted modes") +
+      theme_void() + 
+    guides( colour = guide_legend()) +
+    theme(
+      legend.position = c(0.2, 0.2),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+ggsave("~/Dropbox/Apps/Overleaf/NetworkPaper/figs/comModes.png",
+       width = 5, height = 5)
+```
+
+```{r}
+
+ggplot(cMelbLinksRestructured) +
+  annotation_map_tile(type="osmgrayscale", zoom = 13, alpha = 0.2) +
+  geom_sf(aes(color=speedLimit), alpha=1, show.legend = "line") +
+  scale_color_viridis_c(option="viridis", name="Speed limit (km/h)",direction=-1) +
+      theme_void() + 
+    guides( colour = guide_legend()) +
+    theme(
+      legend.position = c(0.15, 0.15),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+ggsave("~/Dropbox/Apps/Overleaf/NetworkPaper/figs/comSpeed.png",
+       width = 5, height = 5)
+```
+
+
+```{r}
+
+cMelbLinksPositiveSlope <- rbind(
+  { cMelbLinksRestructured %>% filter(fwd_slope_pct >= 0) %>% dplyr::select(slope=fwd_slope_pct) },
+  { cMelbLinksRestructured %>% filter(rvs_slope_pct > 0) %>% dplyr::select(slope=rvs_slope_pct)} )
+
+ggplot(cMelbLinksPositiveSlope) +
+  annotation_map_tile(type="osmgrayscale", zoom = 13, alpha = 0.2) +
+  geom_sf(aes(color=slope), alpha=1, show.legend = "line") +
+  scale_color_viridis_c(option="viridis",trans="sqrt", name="Upward slope (%)",direction=-1) +
+      theme_void() + 
+    guides( colour = guide_legend()) +
+    theme(
+      legend.position = c(0.15, 0.15),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+ggsave("~/Dropbox/Apps/Overleaf/NetworkPaper/figs/comUpHillSlope.png",
+       width = 5, height = 5)
+```
+
+
+```{r}
+
+cMelbLinksNegativeSlope <- rbind(
+  { cMelbLinksRestructured %>% filter(fwd_slope_pct < 0) %>% dplyr::select(slope=fwd_slope_pct) },
+  { cMelbLinksRestructured %>% filter(rvs_slope_pct <= 0) %>% dplyr::select(slope=rvs_slope_pct)} ) 
+
+ggplot(cMelbLinksNegativeSlope) +
+  annotation_map_tile(type="osmgrayscale", zoom = 13, alpha = 0.2) +
+  geom_sf(aes(color=slope), alpha=1, show.legend = "line") +
+  scale_color_viridis_c(option="magma", name="Downward slope (%)",direction=-1) +
+      theme_void() + 
+    guides( colour = guide_legend()) +
+    theme(
+      legend.position = c(0.1, 0.1),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+
+ggsave("~/Dropbox/Apps/Overleaf/NetworkPaper/figs/comDownHillSlope.png",
+       width = 5, height = 5)
+```
+
+```{r}
+
+
+ggplot(cMelbNodes) +
+  annotation_map_tile(type="osmgrayscale", zoom = 13, alpha = 0.2) +
+  geom_sf(data = cMelbLinksRestructured, color="#000000", alpha=0.1) +
+  geom_sf(aes(color=type), alpha=0.8, size=0.6) +
+  scale_color_brewer(palette = "Dark2", name="Intersection/Roundabout type") +
+      theme_void() + 
+    guides( colour = guide_legend()) +
+    theme(
+      legend.position = c(0.22, 0.15),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+
+ggsave("~/Dropbox/Apps/Overleaf/NetworkPaper/figs/intersectionTypes.png",
+       width = 5, height = 5)
+
+```
+
+```{r}
+
+
+ggplot(cMelbNodes) +
+  annotation_map_tile(type="osmgrayscale", zoom = 13, alpha = 0.2) +
+  geom_sf(data = cMelbLinksRestructured, color="#000000", alpha=0.1) +
+  geom_sf(aes(fill=z), shape=21, color="#808080", alpha=0.8, size=0.8) +
+  scale_fill_viridis_c(option="magma", name="Elevation (m)",direction=-1) +
+  # scale_color_brewer(palette = "Dark2", name="Intersection/Roundabout type") +
+      theme_void() + 
+    guides( colour = guide_legend()) +
+    theme(
+      legend.position = c(0.15, 0.15),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+
+ggsave("~/Dropbox/Apps/Overleaf/NetworkPaper/figs/nodeElevation.png",
+       width = 5, height = 5)
+
+```
+

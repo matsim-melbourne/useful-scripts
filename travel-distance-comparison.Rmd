@@ -126,11 +126,11 @@ tripsProcessed %>%
                                  mode=="bicycle" ~ "Cycling",
                                  mode=="walk" ~ "Walking",
                                  TRUE ~ "NA")) %>% 
-  ggplot(aes(x=`Travel Mode`, y=`Travel Time Difference`,color=`Travel Mode`, 
+  ggplot(aes(x=`Travel Mode`, y=`Travel Time Difference`, 
              fill= `Travel Mode`)) +
   geom_boxplot(alpha=0.8) +
-  scale_color_brewer(palette = "Dark2") +
-  scale_fill_brewer(palette = "Dark2") +
+  # scale_color_brewer(palette = "Greys") +
+  scale_fill_brewer(palette = "Greys") +
     guides( colour = guide_legend()) +
     theme(
       legend.position ="none"
@@ -153,11 +153,11 @@ tripsProcessed %>%
                                  mode=="bicycle" ~ "Cycling",
                                  mode=="walk" ~ "Walking",
                                  TRUE ~ "NA")) %>% 
-  ggplot(aes(x=`Travel Mode`, y=`Travel Distance Difference`,color=`Travel Mode`, 
+  ggplot(aes(x=`Travel Mode`, y=`Travel Distance Difference`, 
              fill= `Travel Mode`)) +
   geom_boxplot(alpha=0.8) +
-  scale_color_brewer(palette = "Dark2") +
-  scale_fill_brewer(palette = "Dark2") +
+  # scale_color_brewer(palette = "Greys") +
+  scale_fill_brewer(palette = "Greys") +
     guides( colour = guide_legend()) +
     theme(
       legend.position ="none"
