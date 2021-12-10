@@ -140,11 +140,15 @@ addCarLinks <- function(carData,
 # - add the link row number to the cycling data
 # - also add the link's from and to node id's
 
+
 addBikeLinks <- function(cyclingVolAverage,
                          cycleCountersMeta,
                          links,
                          nodes) {
                          # network = "./generatedNetworks/MATSimMelbNetwork.sqlite") {
+ 
+  # cyclingVolAverage = cyclingVolAverage; cycleCountersMeta = cycleCountersMeta; links = networkLinks; nodes = networkNodes
+   
   cycleCounterCoordinated <- cycleCountersMeta %>% 
     # Extracting the site number
     mutate(siteNumber=stringr::str_extract(site,pattern = "X[0-9]+")) %>% 
@@ -219,10 +223,10 @@ addBikeLinks <- function(cyclingVolAverage,
   #   mutate(link_id = row_number())
   
   lane.links <- links %>%
-    filter(cycleway %in% c("lane", "seperated_lane", "shared_lane"))
+    filter(cycleway %in% c("simple_lane", "seperated_lane", "shared_path"))
   
   path.links <- links %>%
-    filter(cycleway == "bicyclepath")
+    filter(cycleway == "bikepath")
   
   nodes <- nodes %>%
     # filter to nodes used in links, to remove any disconnected (not really necessary)
