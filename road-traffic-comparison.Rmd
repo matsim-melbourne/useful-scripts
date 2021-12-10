@@ -189,10 +189,10 @@ carSimHourlyAll) %>%
       legend.background = element_rect(fill = "#f5f5f2", color = NA)
     ) +
   xlab("Hour of the day") +
-  ylab("Traffic volume %")
+  ylab("Traffic volume (%)")
 
 ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/carTrafficOveral.png",
-       width= 7, height = 4)
+       width= 5, height = 3)
 ```
 
 
@@ -226,8 +226,7 @@ ggsave(paste0(outputDir,"carGeh.png"), width= 50, height = 50, units="cm")
 carDataWithGEH %>% 
   drop_na(gehStat) %>% 
   group_by(link_id) %>% 
-  summarise(avgGEH=mean(gehStat)) %>% 
-  view()
+  summarise(avgGEH=mean(gehStat))
 ```
 
 ### Using precentage error instead of GEH
@@ -249,6 +248,7 @@ carDataWithGEH %>%
 {carDataWithGEH %>% filter(gehStat<=5) %>% nrow()} / nrow(carDataWithGEH)
 
 carDataWithApe <- carData %>% 
+    filter(!link_id%in%c(54473, 162636, 119121)) %>%
   mutate(sim_volume=sim_volume*1.25) %>% 
   mutate(ape= abs(obs_volume-sim_volume)/obs_volume )
 
@@ -294,9 +294,21 @@ error_wape <- carDataPct.h %>%
 
 error_wape %>% 
   ggplot(aes(x=hour, y=wape)) +
-  geom_line()
+  geom_line() +
+    theme(
+      legend.position = "bottom",
+      legend.title = element_blank(),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    ) +
+  ylab("Weighted Absolute Error (%)") +
+  xlab("Hour of the day")
 
-ggsave(paste0(outputDir,"car_wape.png"), width= 5, height = 5)
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/car_wape.png",
+       width= 5, height = 3)
 
 ```
 
@@ -339,9 +351,18 @@ bikeSimulationFiltered <- bikeSimulation %>%
 
 bikeSimulationLong <- bikeSimulationFiltered %>% 
   pivot_longer(cols = starts_with("X"), names_to="hour", values_to="sim_volume") %>% 
-  mutate(hour=as.integer(str_remove(hour,"X"))) %>% 
-  mutate(sim_volume=sim_volume*10) # %>% # Because I used 10% sample
-  # mutate(Source="Simulation")
+  mutate(hour=as.double(str_remove(hour,"X"))) %>% 
+  mutate(sim_volume=sim_volume*10)  %>% # Because I used 10% sample 
+  mutate(hour=case_when(hour==24 ~ 0,
+                        hour==25 ~ 1,
+                        hour==26 ~ 2,
+                        hour==27 ~ 3,
+                        hour==28 ~ 4,
+                        hour==29 ~ 5,
+                        hour==30 ~ 6,
+                        TRUE ~ hour)) %>% 
+  group_by(link_id, hour) %>% 
+  summarise(sim_volume=sum(sim_volume,na.rm = T))
 
 bikeData <- bikeObservations %>% 
   left_join(bikeSimulationLong, by = c("link_id","hour"))
@@ -396,30 +417,6 @@ ggsave(paste0(outputDir,"bike.png"), width= 50, height = 50, units="cm")
 
 ```
 
-Selecting two properly matched bike data
-
-```{r}
-bikeData %>% 
-  filter(link_id%in%c(191054, 446314)) %>% 
-  # filter(link_id==11169) %>% 
-  ggplot(aes(x=hour)) +
-  geom_line(aes(y=obs_volume, color="observation")) + 
-  geom_line(aes(y=sim_volume, color="simulation")) +
-  facet_wrap("link_id") +
-  theme(
-      legend.position = "bottom",
-      legend.title = element_blank(),
-      text = element_text(color = "#22211d"),
-      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
-      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
-      legend.background = element_rect(fill = "#f5f5f2", color = NA)
-    ) +
-  xlab("Hour of the day") +
-  ylab("Traffic volume")
-
-ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/bikeSelected.png",
-       width= 7, height = 4)
-```
 
 All bikes on the road traffice
 
@@ -427,7 +424,7 @@ All bikes on the road traffice
 
 bikeSimHourlyAll <- bikeSimulationLong %>% 
   filter(!is.na(sim_volume)) %>% 
-  filter(hour<24) %>% 
+  # filter(hour<24) %>% 
   group_by(hour) %>% 
   summarise(volume=sum(sim_volume)) %>% 
   mutate(volume_ratio =100* volume/sum(volume)) %>% 
@@ -457,7 +454,92 @@ bikeSimHourlyAll) %>%
   ylab("Traffic volume %")
 
 ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/bikeTrafficOveral.png",
-       width= 7, height = 6)
+       width= 5, height = 3)
+```
+
+
+### Using precentage error instead of GEH
+
+```{r}
+
+bikeDataWithGEH <- bikeData %>% 
+  filter(!link_id%in%c(54473, 162636, 119121)) %>% 
+  # filter(hour%in%c(6,7,8,9,10,16,17,18,19)) %>% 
+  # mutate(sim_volume=sim_volume*1.25) %>% 
+  mutate(gehStat= sqrt((2*(sim_volume-obs_volume)^2)/(sim_volume+obs_volume))) %>% 
+  drop_na(gehStat)
+
+bikeDataWithGEH %>% 
+  ggplot()+
+  geom_histogram(aes(x=gehStat))
+
+{bikeDataWithGEH %>% filter(gehStat<=10) %>% nrow()} / nrow(bikeDataWithGEH)
+{bikeDataWithGEH %>% filter(gehStat<=5) %>% nrow()} / nrow(bikeDataWithGEH)
+
+bikeDataWithApe <- bikeData %>% 
+    filter(!link_id%in%c(54473, 162636, 119121)) %>%
+  mutate(sim_volume=sim_volume*1.25) %>% 
+  mutate(ape= abs(obs_volume-sim_volume)/obs_volume )
+
+bikeDataWithApe %>% 
+  # filter(link_id==11169) %>% 
+  ggplot(aes(x=hour)) +
+  geom_line(aes(y=ape)) + 
+  facet_wrap("link_id")
+ggsave(paste0(outputDir,"bike_ape.png"), width= 50, height = 50, units="cm")
+
+```
+
+### Comparing hourly shares
+
+```{r}
+
+bikeDataPct.h <- bikeData %>% 
+  mutate(obs_volume=replace_na(obs_volume,0),
+         sim_volume=replace_na(sim_volume,0)) %>% 
+  group_by(link_id) %>% 
+  mutate(obs.pct.h=obs_volume/sum(obs_volume, na.rm = T),
+         sim.pct.h=sim_volume/sum(sim_volume, na.rm = T)) 
+
+bikeDataPct.h %>% 
+  ggplot(aes(x=hour))+
+ geom_line(aes(y=obs.pct.h, color="observation")) + 
+  geom_line(aes(y=sim.pct.h, color="simulation")) +
+  facet_wrap("link_id")
+
+ggsave(paste0(outputDir,"bikepct.png"), width= 50, height = 50, units="cm")
+
+```
+
+Hourly aggregated WAPE
+
+```{r}
+error_wape <- bikeDataPct.h %>% 
+  ungroup() %>% 
+  filter(!is.na(sim.pct.h)) %>% 
+  # mutate(sim.pct.h=ifelse(, 0, sim.pct.h)) %>% 
+  # filter(hour%in%7:18) %>% 
+  group_by(hour) %>% 
+  summarise(wape=100*sum(abs(obs.pct.h-sim.pct.h))/sum(obs.pct.h))
+
+error_wape %>% 
+  ggplot(aes(x=hour, y=wape)) +
+  geom_line() +
+    theme(
+      legend.position = "bottom",
+      legend.title = element_blank(),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    ) +
+  ylab("Weighted Absolute Error (%)") +
+  xlab("Hour of the day")
+
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/bike_wape.png",
+       width= 5, height = 3)
+
 ```
 
 
@@ -482,6 +564,228 @@ bikeDataWithGEH %>%
   facet_wrap("link_id")
 
 ggsave(paste0(outputDir,"bikeGeh.png"), width= 50, height = 50, units="cm")
+
+```
+
+## Pedestrian Traffic
+
+
+
+```{r Reading input bike traffic data}
+
+walkObservations <- read_sf("./data/observationsJoined/walkObsJoined2Network.sqlite") %>% 
+  dplyr::select(link_id_1, link_id_2, hour=time, obs_volume = hourly_counts) %>% 
+  st_drop_geometry()
+
+walkSimulation <- read_sf("./data/simOutputJoined/networkLinksWithHourlyVol.sqlite", 
+                         layer="netwalk")
+
+```
+
+
+```{r restructuring observation and simulation walk data}
+
+walkSimulationFiltered <- walkSimulation %>% 
+  st_drop_geometry() %>% 
+  dplyr::select(link_id=id, starts_with("X")) %>% 
+  filter(link_id %in% na.omit(c(walkObservations$link_id_1,walkObservations$link_id_2)))
+
+walkSimulationLong <- walkSimulationFiltered %>% 
+  pivot_longer(cols = starts_with("X"), names_to="hour", values_to="sim_volume") %>% 
+  mutate(hour=as.double(str_remove(hour,"X"))) %>% 
+  mutate(sim_volume=sim_volume*10)  %>% # Because I used 10% sample 
+  mutate(hour=case_when(hour==24 ~ 0,
+                        hour==25 ~ 1,
+                        hour==26 ~ 2,
+                        hour==27 ~ 3,
+                        hour==28 ~ 4,
+                        hour==29 ~ 5,
+                        hour==30 ~ 6,
+                        TRUE ~ hour)) %>% 
+  group_by(link_id, hour) %>% 
+  summarise(sim_volume=sum(sim_volume,na.rm = T))
+
+walkData <- walkObservations %>% 
+  left_join(walkSimulationLong, by = c("link_id_1"="link_id","hour")) %>% 
+  rename(sim_volume_1=sim_volume) %>%
+  left_join(walkSimulationLong, by = c("link_id_2"="link_id","hour")) %>% 
+  rename(sim_volume_2=sim_volume) %>% 
+  rowwise() %>% 
+  mutate(sim_volume=sum(sim_volume_1,sim_volume_2, na.rm = T))
+  
+
+```
+
+### Plotting the volumes
+
+Daily simulated walk traffic for all roads
+
+```{r}
+
+walkSimulationFiltered <- walkSimulation %>% 
+  filter(total_vol>0) %>% 
+  mutate(volumeAdjusted=total_vol*10) %>% 
+  dplyr::select(volumeAdjusted)
+
+breakPoints <- pretty(walkSimulationFiltered$volumeAdjusted, n = 6)
+
+ggplot(walkSimulationFiltered) +
+  annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) +
+  geom_sf(aes(size=volumeAdjusted, colour=volumeAdjusted, alpha=volumeAdjusted)) +
+  # geom_sf(aes( size=n, colour=n ))  +
+  scale_color_viridis(option="magma", trans="sqrt", breaks=breakPoints, name="Daily volume" ) +
+  scale_alpha_continuous(name="Daily volume", trans="sqrt", range=c(0.1, .9), breaks=breakPoints) +
+  scale_size_continuous(name="Daily volume", range=c(0.01, 2), breaks=breakPoints) +
+    theme_void() + 
+    guides( colour = guide_legend()) +
+    theme(
+      legend.position = c(0.85, 0.8),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    )
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/walkDailyTraffic.png",
+       width = 7, height = 7)
+```
+
+
+```{r}
+
+walkData %>% 
+  # filter(link_id==11169) %>% 
+  ggplot(aes(x=hour)) +
+  geom_line(aes(y=obs_volume, color="observation")) + 
+  geom_line(aes(y=sim_volume, color="simulation")) +
+  facet_wrap("link_id_1")
+
+ggsave(paste0(outputDir,"walk.png"), width= 50, height = 50, units="cm")
+
+```
+
+
+All bikes on the road traffice
+
+```{r}
+
+walkSimHourlyAll <- walkSimulationLong %>% 
+  filter(!is.na(sim_volume)) %>% 
+  # filter(hour<24) %>% 
+  group_by(hour) %>% 
+  summarise(volume=sum(sim_volume)) %>% 
+  mutate(volume_ratio =100* volume/sum(volume)) %>% 
+  mutate(source="Simulation")
+
+walkObsHourlyAll <- walkObservations %>% 
+  group_by(hour) %>% 
+  summarise(volume=sum(obs_volume)) %>% 
+  mutate(volume_ratio =100* volume/sum(volume)) %>% 
+  mutate(source="Observation")
+
+rbind(walkObsHourlyAll,
+walkSimHourlyAll) %>% 
+  # filter(link_id==11169) %>% 
+  ggplot(aes(x=hour,y=volume_ratio, color=source)) +
+  geom_col(aes(fill=source), position = "identity" ,   alpha=0.2) +
+  geom_line() + 
+  theme(
+      legend.position = "bottom",
+      legend.title = element_blank(),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    ) +
+  xlab("Hour of the day") +
+  ylab("Traffic volume %")
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/walkTrafficOveral.png",
+       width= 5, height = 3)
+```
+
+
+### Using precentage error instead of GEH
+
+```{r}
+
+walkDataWithGEH <- walkData %>% 
+  # filter(!link_id%in%c(54473, 162636, 119121)) %>% 
+  # filter(hour%in%c(6,7,8,9,10,16,17,18,19)) %>% 
+  # mutate(sim_volume=sim_volume*1.25) %>% 
+  mutate(gehStat= sqrt((2*(sim_volume-obs_volume)^2)/(sim_volume+obs_volume))) %>% 
+  drop_na(gehStat)
+
+walkDataWithGEH %>% 
+  ggplot()+
+  geom_histogram(aes(x=gehStat))
+
+{walkDataWithGEH %>% filter(gehStat<=10) %>% nrow()} / nrow(walkDataWithGEH)
+{walkDataWithGEH %>% filter(gehStat<=5) %>% nrow()} / nrow(walkDataWithGEH)
+
+walkDataWithApe <- walkData %>% 
+    # filter(!link_id%in%c(54473, 162636, 119121)) %>%
+  mutate(sim_volume=sim_volume*1.25) %>% 
+  mutate(ape= abs(obs_volume-sim_volume)/obs_volume )
+
+walkDataWithApe %>% 
+  # filter(link_id==11169) %>% 
+  ggplot(aes(x=hour)) +
+  geom_line(aes(y=ape)) + 
+  facet_wrap("link_id_1")
+ggsave(paste0(outputDir,"walk_ape.png"), width= 50, height = 50, units="cm")
+
+```
+
+### Comparing hourly shares
+
+```{r}
+
+walkDataPct.h <- walkData %>% 
+  mutate(obs_volume=replace_na(obs_volume,0),
+         sim_volume=replace_na(sim_volume,0)) %>% 
+  group_by(link_id_1,link_id_2) %>% 
+  mutate(obs.pct.h=obs_volume/sum(obs_volume, na.rm = T),
+         sim.pct.h=sim_volume/sum(sim_volume, na.rm = T)) 
+
+walkDataPct.h %>% 
+  ggplot(aes(x=hour))+
+ geom_line(aes(y=obs.pct.h, color="observation")) + 
+  geom_line(aes(y=sim.pct.h, color="simulation")) +
+  facet_wrap("link_id_1")
+
+ggsave(paste0(outputDir,"walkpct.png"), width= 50, height = 50, units="cm")
+
+```
+
+Hourly aggregated WAPE
+
+```{r}
+error_wape <- walkDataPct.h %>% 
+  ungroup() %>% 
+  filter(!is.na(sim.pct.h)) %>% 
+  # mutate(sim.pct.h=ifelse(, 0, sim.pct.h)) %>% 
+  # filter(hour%in%7:18) %>% 
+  group_by(hour) %>% 
+  summarise(wape=100*sum(abs(obs.pct.h-sim.pct.h))/sum(obs.pct.h))
+
+error_wape %>% 
+  ggplot(aes(x=hour, y=wape)) +
+  geom_line() +
+    theme(
+      legend.position = "bottom",
+      legend.title = element_blank(),
+      text = element_text(color = "#22211d"),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA)
+    ) +
+  ylab("Weighted Absolute Error (%)") +
+  xlab("Hour of the day")
+
+
+ggsave("~/Dropbox/Apps/Overleaf/MATSimMelbournePaper/figs/walk_wape.png",
+       width= 5, height = 3)
 
 ```
 

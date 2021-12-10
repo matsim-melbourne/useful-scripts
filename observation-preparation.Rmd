@@ -608,15 +608,15 @@ Sensors 77 and 78 (Harbour Esplanade pedestrian path and bike path) both select 
 
 
 ```{r}
-# walkObsJoined2Network <- addWalkLinks(walkData = walkDataCoordinated,
-#                                        walkSensorLocs = walkSensorLocs,
-#                                        networkLinks,
-#                                        networkNodes)
+ walkObsJoined2Network <- addWalkLinks(walkData = walkDataCoordinated,
+                                        walkSensorLocs = walkSensorLocs,
+                                        networkLinks,
+                                        networkNodes)
 
-# st_write(walkObsJoined2Network, "./data/observationsJoined/walkObsJoined2Network.sqlite",
-#          delete_dsn = T)
-# 
-# walkDataCoordinated %>% glimpse()
+ st_write(walkObsJoined2Network, "./data/observationsJoined/walkObsJoined2Network.sqlite",
+          delete_dsn = T)
+
+ walkDataCoordinated %>% glimpse()
 
 ```
 
