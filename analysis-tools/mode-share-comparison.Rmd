@@ -10,104 +10,153 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 ```
 
-## Intro
 
-This is code compares the mode share of trips from Simulation output to 
-- Simulation input
-- VISTA
-- Census JTW for work trips
+# Trip comparison
 
-## Mode share comparison for All trips
+```{r, preparing the trip data}
 
-### Simulation output processing
-
-```{r reading sim outputs}
-
-simOutputTrips <- read_delim(gzfile("data/simOutputs/10pct/CalibRun6/output_trips.csv.gz"),
+# Simulation output ------------
+simOutputTrips <- read_delim(gzfile("output_trips.csv.gz"),
                       delim=";") %>% 
   # Removing trips with zero distance
   filter(traveled_distance>0) %>%   
-  filter(longest_distance_mode!="walk") %>% 
+  # filter(longest_distance_mode!="walk") %>% 
   mutate(longest_distance_mode=ifelse(longest_distance_mode=="netwalk", "walk", longest_distance_mode)) 
 
-```
-
-```{r}
-
-simOutputTripsCounted <- simOutputTrips %>% 
-  count(mode=longest_distance_mode) %>% 
-  # Getting the pct
-  mutate(pct=100*n/sum(n)) 
-
-```
-
-### Simulation input processing
-
-```{r}
-demandOutputDir <- "data/demand/output-Sep10-10pct/"
-simInputTrips <- read_csv(paste0(demandOutputDir,"7.time/plan.csv")) %>% 
-  # filtering those without mode
-  filter(!is.na(ArrivingMode)) %>%
-  # filtering the trips that are not a vakid trip!
-  filter(!is.na(Distance)) %>% 
-  # renaming bike with bicycle
-  mutate(ArrivingMode=ifelse(ArrivingMode=="bike","bicycle",ArrivingMode)) 
-
-```
-
-```{r}
-simInputTripsCounted <- simInputTrips %>% 
-  # counting trips per mode
-  count(mode=ArrivingMode) %>% 
-  # getting the percentage 
-  mutate(pct=100*n/sum(n))
-```
-
-### VISTA trips processing
-
-```{r}
-
-vistaTrips <- read_csv("~/ownCloud/Data/VISTA/2012-18/T_VISTA1218_V1.csv")
-
-vistaTripsCounted <- vistaTrips %>% 
+vista_trips_cleaned <- 
+  read_csv("~/ownCloud/Data/VISTA/2012-18/T_VISTA1218_V1.csv") %>% 
+  # filterting to 16-18
+  filter(grepl('Y16|Y17|Y18',HHID)) %>%
   # Filtering to valid trips
   filter(CUMDIST>0) %>% 
   # Refactoring the linkmode in VISTA
-  mutate(mode=case_when(LINKMODE=="Bicycle" ~ "bicycle",
-                        LINKMODE=="Vehicle Driver" ~ "car", # Check with Dhirendra/Alan what happens to car passengers?
+  mutate(mode=case_when(LINKMODE=="Bicycle" ~ "bike",
+                        LINKMODE=="Vehicle Driver" ~ "car", 
                         LINKMODE=="Walking" ~ "walk",
                         LINKMODE%in%c("Public Bus","Train","Tram") ~ "pt",
                         TRUE ~ "other")) %>% 
   # Filtering out modes==other
-  filter(mode!="other") %>% 
-  # counting trips per mode
-  # count(mode) %>% 
-  filter(!is.na(WDTRIPWGT)) %>% 
-  group_by(mode) %>% 
-  summarise(n=sum(WDTRIPWGT)) %>% 
-  # get the percentages
-  mutate(pct=100*n/sum(n))
-vistaTripsCounted
+  filter(mode!="other") 
+
 ```
 
-### Plotting them all 
+## Work trips comparison
 
 ```{r}
 
-rbind(mutate(simOutputTripsCounted,source="Simulation Output"),
-      mutate(simInputTripsCounted,source="Simulation "),
-      mutate(vistaTripsCounted,source="VISTA Trips")
-      ) %>% 
-    mutate(source=factor(source,levels=c("VISTA Trips","IVN"),labels=c("SON","IVN"))) %>%   
-  ggplot(aes(x=mode, y=pct, fill=source)) +
-  geom_col(position="dodge") +
-  geom_text(aes(label=paste0(round(pct, digits = 1),"%")), 
-            position=position_dodge(width=0.9), vjust=-0.25)
+sim_work_trips <- simOutputTrips %>% filter(end_activity_type=="Work")
+
+vista_work_trip <- vista_trips_cleaned %>% filter(DESTPLACE1=="Workplace")
+
+sim_work_trips %>% count(mode=longest_distance_mode) %>% mutate(sim_pct=100*n/sum(n)) %>% 
+  left_join({ vista_work_trip %>% count(mode) %>% mutate(vista_pct=100*n/sum(n))}, by="mode") 
+
+```
+
+## Non-work trips comparison
+
+```{r}
+
+sim_nonwork_trips <- simOutputTrips %>% filter(end_activity_type!="Work")
+
+vista_nonwork_trip <- vista_trips_cleaned %>% filter(DESTPLACE1!="Workplace")
+
+sim_nonwork_trips %>% count(mode=longest_distance_mode) %>% mutate(sim_pct=100*n/sum(n)) %>% 
+  left_join({ vista_nonwork_trip %>% count(mode) %>% mutate(vista_pct=100*n/sum(n))}, by="mode") 
+
+```
+
+# Tour-based comparison
+
+```{r, preparing the tour data (this might take a while)}
+
+source("../etc/find-tours.R")
+
+# Find tour mode and distance
+
+## Simulation output ---------------
+
+simOutputTrips <- read_delim(gzfile("output_trips.csv.gz"), delim=";") %>% 
+  # Removing trips with zero distance
+  filter(traveled_distance>0) %>%   
+  # filter(longest_distance_mode!="walk") %>% 
+  mutate(longest_distance_mode=ifelse(longest_distance_mode=="netwalk", 
+                                      "walk", longest_distance_mode)) 
+
+simulation_output_tours <- find_matsim_tours(simOutputTrips)
+
+sim_tours <- simulation_output_tours %>% 
+  mutate(traveled_distance=traveled_distance/1000) %>% 
+  left_join(simOutputTrips[,c("person", "trip_number", "trip_id", "longest_distance_mode")],
+            by = c("person", "trip_number"))  
+
+sim_tours_max_dist <- sim_tours %>%
+  mutate(traveled_distance=traveled_distance/1000) %>% 
+  group_by(tour_id) %>% 
+  summarise(max_dist = max(traveled_distance), tour_dist=sum(traveled_distance))
+
+sim_tours_max_mode <- sim_tours %>%
+  group_by(tour_id, longest_distance_mode) %>% 
+  summarise(mode_dist=sum(traveled_distance)) %>%
+  filter(mode_dist==max(mode_dist))
+
+sim_tours_added <- sim_tours %>% 
+  distinct(tour_id) %>% 
+  left_join(sim_tours_max_dist, by ="tour_id") %>% 
+  left_join(sim_tours_max_mode, by ="tour_id") 
+
+## VISTA ----------------
+
+vista_trips_cleaned <- 
+  read_csv("~/ownCloud/Data/VISTA/2012-18/T_VISTA1218_V1.csv") %>% 
+  # filterting to 16-18
+  filter(grepl('Y16|Y17|Y18',HHID)) %>%
+  # Filtering to valid trips
+  filter(CUMDIST>0) %>% 
+  # Refactoring the linkmode in VISTA
+  mutate(mode=case_when(LINKMODE=="Bicycle" ~ "bike",
+                        LINKMODE=="Vehicle Driver" ~ "car", 
+                        LINKMODE=="Walking" ~ "walk",
+                        LINKMODE%in%c("Public Bus","Train","Tram") ~ "pt",
+                        TRUE ~ "other")) %>% 
+  # Filtering out modes==other
+  filter(mode!="other") 
+
+
+vista_trips_tours <- find_vista_tours(vista_trips_cleaned)
+
+vista_tours <- vista_trips_tours %>%  
+  mutate(mode=case_when(modes=="Bicycle" ~ "bike",
+                        modes=="Vehicle Driver" ~ "car", 
+                        modes=="Walking" ~ "walk",
+                        modes%in%c("Public Bus","Train","Tram") ~ "pt",
+                        TRUE ~ "other"))
+
+vista_tours_max_dist <- vista_tours %>% 
+  group_by(tour_id) %>% 
+  summarise(max_dist = max(traveled_distance), tour_dist=sum(traveled_distance))
+
+
+vista_tours_max_mode <- vista_tours %>%
+  group_by(tour_id, mode) %>% 
+  summarise(mode_dist=sum(traveled_distance)) %>%
+  filter(mode_dist==max(mode_dist))
+
+
+vista_tours_added <- vista_tours %>% 
+  distinct(tour_id) %>% 
+  left_join(vista_tours_max_dist, by ="tour_id") %>% 
+  left_join(vista_tours_max_mode, by ="tour_id") 
+
 
 ```
 
 
-## Mode share comparison for JTW trips
+```{r, compare tour mode shares all tours}
+
+vista_tours_added %>% count(mode) %>% mutate(pct_vista=100*n/sum(n)) %>% 
+  left_join({sim_tours_added %>% count(mode=longest_distance_mode) %>% mutate(pct_sim=100*n/sum(n))}, by = "mode")
+```
 
 ```{r Census JTW}
 
@@ -136,321 +185,3 @@ censusJTWCounted <- censusJTW %>%
 
 censusJTWCounted
 ```
-
-```{r VISTA JTW}
-
-vistaJTW <- read_csv("~/ownCloud/Data/VISTA/2012-18/JTW_VISTA1218_V1.csv") %>% 
-  # Filtering to valid trips
-  filter(JTWDIST>0) %>% 
-  # Refactoring the linkmode in VISTA
-  mutate(mode=case_when(JTWMODE=="Bicycle" ~ "bicycle",
-                        JTWMODE=="Vehicle Driver" ~ "car", # Check with Dhirendra/Alan what happens to car passengers?
-                        JTWMODE=="Walking" ~ "walk",
-                        JTWMODE%in%c("Public Bus","Train","Tram") ~ "pt",
-                        TRUE ~ "other")) %>% 
-  # Filtering out modes==other
-  filter(mode!="other") 
-
-vistaJTWCounted <- vistaJTW %>% 
-  # counting trips per mode
-  # count(mode) %>% 
-  filter(!is.na(WDJTWWGT)) %>% 
-  group_by(mode) %>% 
-  summarise(n=sum(WDJTWWGT)) %>% 
-  # get the percentages
-  mutate(pct=100*n/sum(n))
-
-vistaJTWCounted
-```
-
-
-```{r Simulation input JTW}
-
-simInputJTW <- simInputTrips %>% 
-  filter(Activity=="Work") 
-  
-simInputJTWCounted <- simInputJTW %>% 
-  # counting trips per mode
-  count(mode=ArrivingMode) %>% 
-  # getting the percentage 
-  mutate(pct=100*n/sum(n))
-
-simInputJTWCounted
-```
-
-
-```{r Simulation Output JTW}
-
-simOutputJTW <- simOutputTrips %>% 
-  filter(end_activity_type=="Work") 
-  
-simOutputJTWCounted <- simOutputJTW  %>% 
-  # Counting number of trips with each mode
-  count(mode=longest_distance_mode) %>% 
-  # Getting the pct
-  mutate(pct=100*n/sum(n)) 
-
-simOutputJTWCounted
-```
-
-### Plotting JTW trips
-
-```{r}
-workTripsJoined <-rbind(mutate(simOutputJTWCounted,source="Simulation Output"),
-      # mutate(simInputJTWCounted,source="Simulation Input JTW"),
-      mutate(vistaJTWCounted,source="VISTA 2012-16"),
-      mutate(censusJTWCounted,source="Census 2016")
-      ) %>% 
-  mutate(type="Mandatory trips - work")
-
-workTripsJoined %>% 
-  ggplot(aes(x=mode, y=pct, fill=source)) +
-  geom_col(position="dodge") +
-  geom_text(aes(label=paste0(round(pct, digits = 1),"%")), 
-            position=position_dodge(width=0.9), vjust=-0.25)
-
-```
-
-## education trips Analysis
-
-```{r VISTA education trips}
-
-vistaEdu <- vistaTrips %>%
-  filter(DESTPURP1%in%c("Education")) %>% 
-  # Filtering to valid trips
-  filter(CUMDIST>0) %>% 
-  # Refactoring the linkmode in VISTA
-  mutate(mode=case_when(LINKMODE=="Bicycle" ~ "bicycle",
-                        LINKMODE=="Vehicle Driver" ~ "car", # Check with Dhirendra/Alan what happens to car passengers?
-                        LINKMODE=="Walking" ~ "walk",
-                        LINKMODE%in%c("Public Bus","Train","Tram") ~ "pt",
-                        TRUE ~ "other")) %>% 
-  # Filtering out modes==other
-  filter(mode!="other") 
-
-vistaEduCounted <- vistaEdu %>% 
-  # counting trips per mode
-  # count(mode) %>% 
-  filter(!is.na(WDTRIPWGT)) %>% 
-  group_by(mode) %>% 
-  summarise(n=sum(WDTRIPWGT)) %>% 
-  # get the percentages
-  mutate(pct=100*n/sum(n))
-
-vistaEduCounted
-```
-
-```{r Simulation input education trips}
-
-simInputEdu <- simInputTrips %>% 
-  filter(Activity=="Study") 
-  
-simInputEduCounted <- simInputEdu %>% 
-  # counting trips per mode
-  count(mode=ArrivingMode) %>% 
-  # getting the percentage 
-  mutate(pct=100*n/sum(n))
-
-simInputEduCounted
-```
-
-```{r Simulation Output education trips}
-
-simOutputEdu <- simOutputTrips %>% 
-  filter(end_activity_type=="Study") 
-  
-simOutputEduCounted <- simOutputEdu  %>% 
-  # Counting number of trips with each mode
-  count(mode=longest_distance_mode) %>% 
-  # Getting the pct
-  mutate(pct=100*n/sum(n)) 
-
-simOutputEduCounted
-```
-
-### Plotting education trips
-```{r}
-
-educationTripsJoined <- rbind(mutate(simOutputEduCounted,source="Simulation Output"),
-      # mutate(simInputEduCounted,source="Simulation Input"),
-      mutate(vistaEduCounted,source="VISTA 2012-16")
-      )  %>% 
-  mutate(type="Mandatory trips - education")
-
-educationTripsJoined %>% 
-  ggplot(aes(x=mode, y=pct, fill=source)) +
-  geom_col(position="dodge") +
-  geom_text(aes(label=paste0(round(pct, digits = 1),"%")), 
-            position=position_dodge(width=0.9), vjust=-0.25)
-
-```
-
-
-
-## Discretionary trips Analysis
-
-```{r VISTA Discretionary trips}
-
-vistaDiscretionary <- vistaTrips %>%
-  filter(!DESTPURP1%in%c("Education", "Work Related")) %>% 
-  # Filtering to valid trips
-  filter(CUMDIST>0) %>% 
-  # Refactoring the linkmode in VISTA
-  mutate(mode=case_when(LINKMODE=="Bicycle" ~ "bicycle",
-                        LINKMODE=="Vehicle Driver" ~ "car", # Check with Dhirendra/Alan what happens to car passengers?
-                        LINKMODE=="Walking" ~ "walk",
-                        LINKMODE%in%c("Public Bus","Train","Tram") ~ "pt",
-                        TRUE ~ "other")) %>% 
-  # Filtering out modes==other
-  filter(mode!="other") 
-
-vistaDiscretionaryCounted <- vistaDiscretionary %>% 
-  # counting trips per mode
-  # count(mode) %>% 
-  filter(!is.na(WDTRIPWGT)) %>% 
-  group_by(mode) %>% 
-  summarise(n=sum(WDTRIPWGT)) %>% 
-  # get the percentages
-  mutate(pct=100*n/sum(n))
-
-vistaDiscretionaryCounted
-```
-
-```{r Simulation input Discretionary trips}
-
-simInputDiscretionary <- simInputTrips %>% 
-  filter(!Activity%in%c("Study","Work")) 
-  
-simInputDiscretionaryCounted <- simInputDiscretionary %>% 
-  # counting trips per mode
-  count(mode=ArrivingMode) %>% 
-  # getting the percentage 
-  mutate(pct=100*n/sum(n))
-
-simInputDiscretionaryCounted
-```
-
-```{r Simulation Output Discretionary trips}
-
-simOutputDiscretionary <- simOutputTrips %>% 
-  filter(!end_activity_type%in%c("Study","Work")) 
-  
-simOutputDiscretionaryCounted <- simOutputDiscretionary  %>% 
-  # Counting number of trips with each mode
-  count(mode=longest_distance_mode) %>% 
-  # Getting the pct
-  mutate(pct=100*n/sum(n)) 
-
-simOutputDiscretionaryCounted
-```
-
-### Plotting Discretionary trips
-```{r}
-discretionaryCountsJoined <- rbind(
-  mutate(simOutputDiscretionaryCounted,source="Simulation Output"),
-  # mutate(simInputDiscretionaryCounted,source="Simulation Input"),
-  mutate(vistaDiscretionaryCounted,source="VISTA 2012-16")
-  ) %>% 
-  mutate(type="Discretionary trips")
-
-discretionaryCountsJoined %>% 
-  ggplot(aes(x=mode, y=pct, fill=source)) +
-  geom_col(position="dodge") +
-  geom_text(aes(label=paste0(round(pct, digits = 1),"%")), 
-            position=position_dodge(width=0.9), vjust=-0.25)
-
-```
-
-
-
-## NonWork trips Analysis
-
-```{r VISTA NonWork trips}
-
-vistaNonWork <- vistaTrips %>%
-  filter(DESTPURP1!="Work Related") %>% 
-  # Filtering to valid trips
-  filter(CUMDIST>0) %>% 
-  # Refactoring the linkmode in VISTA
-  mutate(mode=case_when(LINKMODE=="Bicycle" ~ "bicycle",
-                        LINKMODE=="Vehicle Driver" ~ "car", # Check with Dhirendra/Alan what happens to car passengers?
-                        LINKMODE=="Walking" ~ "walk",
-                        LINKMODE%in%c("Public Bus","Train","Tram") ~ "pt",
-                        TRUE ~ "other")) %>% 
-  # Filtering out modes==other
-  filter(mode!="other") 
-
-vistaNonWorkCounted <- vistaNonWork %>% 
-  # counting trips per mode
-  # count(mode) %>% 
-  filter(!is.na(WDTRIPWGT)) %>% 
-  group_by(mode) %>% 
-  summarise(n=sum(WDTRIPWGT)) %>% 
-  # get the percentages
-  mutate(pct=100*n/sum(n))
-
-vistaNonWorkCounted
-```
-
-```{r Simulation input NonWork trips}
-
-simInputNonWork <- simInputTrips %>% 
-  filter(Activity!="Work") 
-  
-simInputNonWorkCounted <- simInputNonWork %>% 
-  # counting trips per mode
-  count(mode=ArrivingMode) %>% 
-  # getting the percentage 
-  mutate(pct=100*n/sum(n))
-
-simInputNonWorkCounted
-```
-
-```{r Simulation Output NonWork trips}
-
-simOutputNonWork <- simOutputTrips %>% 
-  filter(end_activity_type!="Work") 
-  
-simOutputNonWorkCounted <- simOutputNonWork  %>% 
-  # Counting number of trips with each mode
-  count(mode=longest_distance_mode) %>% 
-  # Getting the pct
-  mutate(pct=100*n/sum(n)) 
-
-simOutputNonWorkCounted
-```
-
-### Plotting NonWork trips
-```{r}
-NonWorkCountsJoined <- rbind(
-  mutate(simOutputNonWorkCounted,source="Simulation Output"),
-  # mutate(simInputNonWorkCounted,source="Simulation Input"),
-  mutate(vistaNonWorkCounted,source="VISTA 2012-16")
-  ) %>% 
-  mutate(type="NonWork trips")
-
-NonWorkCountsJoined %>% 
-  ggplot(aes(x=mode, y=pct, fill=source)) +
-  geom_col(position="dodge") +
-  geom_text(aes(label=paste0(round(pct, digits = 1),"%")), 
-            position=position_dodge(width=0.9), vjust=-0.25)
-
-```
-
-
-## Table for the paper:
-
-```{r}
-library(xtable)
-
-allModeSharesJoined <- rbind(workTripsJoined,
-educationTripsJoined,
-NonWorkCountsJoined,
-discretionaryCountsJoined) %>% 
-  mutate(pct2=paste0(round(pct, digits = 1),"%")) %>% 
-  pivot_wider(id_cols = c("type","mode"), names_from = "source", values_from="pct2") 
-
-print(xtable(allModeSharesJoined), booktabs = TRUE)
-
-```
-

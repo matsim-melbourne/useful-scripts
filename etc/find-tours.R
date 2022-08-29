@@ -74,7 +74,7 @@ find_vista_tours <- function(trips_vista){
 find_matsim_tours <- function(trips_simulation){
   
   
-  trips_simulation <- read_delim("output_trips.csv.gz",delim = ";")
+  # trips_simulation <- read_delim("output_trips.csv.gz",delim = ";")
   
   # Identifying home-tours so that we change the mode for the whole tour
   trips_simulation <- trips_simulation %>% 
@@ -85,6 +85,8 @@ find_matsim_tours <- function(trips_simulation){
   tour_id = 0
   old_person = 0
   old_tour_id=-1
+  
+  
   
   for(i in 1:nrow(trips_simulation) ){
     
@@ -139,4 +141,3 @@ find_matsim_tours <- function(trips_simulation){
   return(trips_simulation) 
 }
 
-  
