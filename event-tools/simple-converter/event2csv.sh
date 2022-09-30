@@ -18,7 +18,7 @@ grep "left link\|entered link" |
 sed -e "s/left link/left_link/g; s/entered link/entered_link/g " |
 cut -d "\"" -f 2,4,6,8 |
 sed -e "s/\"/,/g"|
-sed -e '1i\'$'\n''time,type,vehicle,link' | cat > trip_links.txt
+sed -e '1i\'$'\n''time,type,link,vehicle' | cat > trip_links.txt
 
 # vehicle-traffic interaction
 zcat $events_file | tail -n +3 | head -n -2 |
