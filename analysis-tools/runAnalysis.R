@@ -6,9 +6,9 @@ travDistAnalysis <- F
 
 # Building the folder structure
 # Change the dir name based on your simulation run
-simDesc <- "10pct_withMc_Sep29"
+simDesc <- "20220928"
 outputDir <- paste0("./calibrationOutputs/", simDesc,"/")
-if (!dir.exists(outputDir)) dir.create(outputDir)
+if (!dir.exists(outputDir)) dir.create(outputDir,recursive=T)
 
 # Running the observation data processing
 # Set prcessObsData to false if this step is not required
@@ -23,7 +23,7 @@ if(processObsData) rmarkdown::render("observation-preparation.Rmd",
 # If skipping, make sure to have the joined data in simDataJoined dir
 if(processSimData) rmarkdown::render("simOutputPorcessing.Rmd",
                                      output_dir=outputDir, quiet = F,
-                                     params = list(parseXML=TRUE))
+                                     params = list(parseXML=F))
 
 # Running the analysis for road traffic
 # This code requires both observation and simulation data processed and

@@ -21,14 +21,14 @@ library(ggspatial)
 library(sf)
 library(vroom)
 library(fs)
-source("./functions/convertXMLNetwork.R")
+source('../network-tools/xml2sqlite/convertXMLNetwork.R')
 print(params$parseXML)
 ```
 
 ### Converting event.xml output to CSVs
 
 ```{r cleaning old files, eval=params$parseXM}
-paths <- dir_ls("./data/simOutputs/",glob = "*.txt" )
+paths <- dir_ls("./data/sim-outputs/",glob = "*.txt" )
 if (length(paths)>0) {
   walk(paths, ~file.remove(.x))
 }
@@ -39,7 +39,7 @@ if (length(paths)>0) {
 
 #!/bin/bash
 if [[ $# -eq 0 ]]; then
-  events_file=./data/simOutputs/output_events.xml.gz;
+  events_file=./data/sim-outputs/output_events.xml.gz;
 else
   events_file=$1
 fi
@@ -49,7 +49,7 @@ zcat $events_file | tail -n +3 | head -n -2 |
 grep "departure\|arrival" |
 cut -d "\"" -f 2,4,6,8,10 |
 sed -e "s/\"/,/g"|
-sed -e '1i\'$'\n''time,type,person,link,legMode' | cat > ./data/simOutputs/person_trip.txt
+sed -e '1i\'$'\n''time,type,person,link,legMode' | cat > ./data/sim-outputs/person_trip.txt
 
 # left link and entered link
 zcat $events_file | tail -n +3 | head -n -2 |
@@ -57,7 +57,7 @@ grep "left link\|entered link" |
 sed -e "s/left link/left_link/g; s/entered link/entered_link/g " |
 cut -d "\"" -f 2,4,6,8 |
 sed -e "s/\"/,/g"|
-sed -e '1i\'$'\n''time,type,link,vehicle' | cat > ./data/simOutputs/trip_links.txt
+sed -e '1i\'$'\n''time,type,link,vehicle' | cat > ./data/sim-outputs/trip_links.txt
 
 # vehicle-traffic interaction
 zcat $events_file | tail -n +3 | head -n -2 |
@@ -66,14 +66,14 @@ sed -e "s/vehicle leaves traffic/vehicle_leaves_traffic/g;" |
 sed -e "s/vehicle enters traffic/vehicle_enters_traffic/g;" |
 cut -d "\"" -f 2,4,6,8,10,12 |
 sed -e "s/\"/,/g"|
-sed -e '1i\'$'\n''time,type,person,link,vehicle,networkMode' | cat > ./data/simOutputs/vehicle_trip.txt
+sed -e '1i\'$'\n''time,type,person,link,vehicle,networkMode' | cat > ./data/sim-outputs/vehicle_trip.txt
 
 # Activity-startend actstart
 zcat  $events_file | tail -n +3 | head -n -2 |
 grep "actstart\|actend" |
 cut -d "\"" -f 2,4,6,8,10 |
 sed -e "s/\"/,/g"|
-sed -e '1i\'$'\n''time,type,person,link,actType' | cat > ./data/simOutputs/person_act.txt
+sed -e '1i\'$'\n''time,type,person,link,actType' | cat > ./data/sim-outputs/person_act.txt
 
 
 ```
@@ -82,16 +82,16 @@ sed -e '1i\'$'\n''time,type,person,link,actType' | cat > ./data/simOutputs/perso
 
 ```{r reading trip link events}
 
-tripLinks <- vroom("./data/simOutputs/trip_links.txt")
-# tripLinks %>% slice_sample(prop=0.1) %>% write_delim("./data/simOutputs/trip_links_small.txt")
-# tripLinks <- vroom("./data/simOutputs/trip_links_small.txt") 
+tripLinks <- vroom("./data/sim-outputs/trip_links.txt")
+# tripLinks %>% slice_sample(prop=0.1) %>% write_delim("./data/sim-outputs/trip_links_small.txt")
+# tripLinks <- vroom("./data/sim-outputs/trip_links_small.txt") 
 
 ```
 
 Adding mode type to the trips
 
 ```{r adding mode to link events}
-vehicleTrips <- read_csv("./data/simOutputs/vehicle_trip.txt")
+vehicleTrips <- read_csv("./data/sim-outputs/vehicle_trip.txt")
 
 vehicleLists <- vehicleTrips %>% 
   distinct(person,vehicle,networkMode) 
@@ -145,7 +145,7 @@ if (file.exists("./data/networks/networkConverted.sqlite")) {
   networkLinks <- st_read("./data/networks/networkConverted.sqlite", 
                           layer = "links", quiet=T)
 }else{
-  networkConverted <- convertXMLNetowrk(xmlFile = "./data/simOutputs/output_network.xml",
+  networkConverted <- convertXMLNetowrk(xmlFile = "./data/sim-outputs/output_network.xml",
                                         netCRS = 28355)
   networkLinks <- networkConverted[[2]]
 }
@@ -184,6 +184,7 @@ networkLinksWithDailyVol_car %>%
   # filter(total_vol>10) %>% 
   ggplot() +
   # annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) +
+  annotation_map_tile(zoom=9, alpha=0.6) +
   geom_sf(aes(fill=total_vol)) +
   scale_fill_viridis_c(trans = "sqrt", alpha = .8) 
 
@@ -194,7 +195,7 @@ Joining daily bike traffic data to road network
 ```{r joining daily bike volumes to network, eval=FALSE}
 
 bikeExitLinkAggregatedDaily <- exitLinksWithTime %>% 
-  filter(networkMode=="bicycle") %>% # filter to car trips only
+  filter(networkMode=="bike") %>% # filter to car trips only
   mutate(id=as.character(link)) %>% 
   group_by(id) %>% 
   summarise(total_vol=n())
@@ -219,6 +220,7 @@ networkLinksWithDailyVol_bike %>%
   # filter(total_vol>10) %>% 
   ggplot() +
   # annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) +
+  # annotation_map_tile(zoom=9, alpha=0.6) +
   geom_sf(aes(fill=total_vol)) +
   scale_fill_viridis_c(trans = "sqrt", alpha = .8) 
 
@@ -238,13 +240,13 @@ carExitLinkAggregatedHourly <- exitLinksWithTime %>%
 # carExitLinkAggregatedHourly <- tempDf %>% 
   filter(networkMode=="car") %>% # filter to car trips only
   mutate(id=as.character(link)) %>% 
+  mutate(leftHour=paste0("h",leftHour)) %>% 
   group_by(id, leftHour) %>% 
   summarise(hourly_vol=n()) %>% 
   ungroup() %>% 
   pivot_wider(id_cols=id, names_from=leftHour, values_from=hourly_vol) %>% 
   mutate(total_vol = rowSums(across(where(is.numeric)),na.rm = T))
   
-
 networkLinksWithHourlyVol_car <- networkLinks %>% 
   left_join(carExitLinkAggregatedHourly, by = "id")   
 st_write(networkLinksWithHourlyVol_car, 
@@ -277,7 +279,8 @@ Joining Hourly bike traffic data to road network
 
 bikeExitLinkAggregatedHourly <- exitLinksWithTime %>%
 # bikeExitLinkAggregatedHourly <- tempDf %>% 
-  filter(networkMode=="bicycle") %>% # filter to car trips only
+  filter(networkMode=="bike") %>% # filter to car trips only
+    mutate(leftHour=paste0("h",leftHour)) %>% 
   mutate(id=as.character(link)) %>% 
   group_by(id, leftHour) %>% 
   summarise(hourly_vol=n()) %>% 
@@ -301,6 +304,46 @@ plotting Hourly bike traffic volume
 # networkLinksWithHourlyVol$hourly_vol <- st_read("networkLinksWithHourlyVol.sqlite")
 
 networkLinksWithHourlyVol_bike %>% 
+  drop_na(total_vol) %>% 
+  # filter(hourly_vol>10) %>% 
+  ggplot() +
+  # annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) +
+  geom_sf(aes(fill=total_vol)) +
+  scale_fill_viridis_c(trans = "sqrt", alpha = .8) 
+
+```
+
+
+Joining Hourly netwalk traffic data to road network
+
+```{r joining Hourly netwalk volumes to network}
+
+netwalkExitLinkAggregatedHourly <- exitLinksWithTime %>%
+# bikeExitLinkAggregatedHourly <- tempDf %>% 
+  filter(networkMode=="netwalk") %>% # filter to car trips only
+    mutate(leftHour=paste0("h",leftHour)) %>% 
+  mutate(id=as.character(link)) %>% 
+  group_by(id, leftHour) %>% 
+  summarise(hourly_vol=n()) %>% 
+  ungroup() %>% 
+  pivot_wider(id_cols=id, names_from=leftHour, values_from=hourly_vol) %>% 
+  mutate(total_vol = rowSums(across(where(is.numeric)),na.rm = T))
+
+networkLinksWithHourlyVol_netwalk <- networkLinks %>% 
+  left_join(netwalkExitLinkAggregatedHourly, by = "id")   
+
+st_write(networkLinksWithHourlyVol_netwalk, 
+         "./data/simOutputJoined/networkLinksWithHourlyVol.sqlite",
+         layer="netwalk",
+         delete_layer = T)
+```
+plotting Hourly netwalk traffic volume
+
+```{r plotting Hourly netwalk volumes on network}
+
+# networkLinksWithHourlyVol$hourly_vol <- st_read("networkLinksWithHourlyVol.sqlite")
+
+networkLinksWithHourlyVol_netwalk %>% 
   drop_na(total_vol) %>% 
   # filter(hourly_vol>10) %>% 
   ggplot() +

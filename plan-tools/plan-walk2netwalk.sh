@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-FILE="$1""_netwalk"
+FILE="netwalk_""$1"
 
 zcat $1 |
-sed -e "s/walk/_netwalk/g" |
+sed -e "s/walk/netwalk/g" |
 gzip >> $FILE

@@ -59,12 +59,12 @@ carObservationsLong <- carObservations %>%
 
 carSimulationFiltered <- carSimulation %>% 
   st_drop_geometry() %>% 
-  dplyr::select(link_id=id, starts_with("X")) %>% 
+  dplyr::select(link_id=id, starts_with("h")) %>% 
   filter(link_id %in% carObservations$link_id)
 
 carSimulationLong <- carSimulationFiltered %>% 
-  pivot_longer(cols = starts_with("X"), names_to="hour", values_to="sim_volume") %>% 
-  mutate(hour=as.double(str_remove(hour,"X"))) %>% 
+  pivot_longer(cols = starts_with("h"), names_to="hour", values_to="sim_volume") %>% 
+  mutate(hour=as.double(str_remove(hour,"h"))) %>% 
   mutate(sim_volume=sim_volume*10)  %>% # Because I used 10% sample 
   mutate(hour=case_when(hour==24 ~ 0,
                         hour==25 ~ 1,
@@ -97,7 +97,7 @@ carSimulationFiltered <- carSimulation %>%
 carBreakPoints <- pretty(carSimulationFiltered$volumeAdjusted, n = 6)
 
 ggplot(carSimulationFiltered) +
-  annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) +
+  annotation_map_tile(zoom=9, alpha=0.6) +
   geom_sf(aes(size=volumeAdjusted, colour=volumeAdjusted, alpha=volumeAdjusted)) +
   # geom_sf(aes( size=n, colour=n ))  +
   scale_color_viridis(option="magma", trans="sqrt", breaks=carBreakPoints, name="Daily volume" ) +
@@ -346,12 +346,12 @@ bikeSimulation <- read_sf("./data/simOutputJoined/networkLinksWithHourlyVol.sqli
 
 bikeSimulationFiltered <- bikeSimulation %>% 
   st_drop_geometry() %>% 
-  dplyr::select(link_id=id, starts_with("X")) %>% 
+  dplyr::select(link_id=id, starts_with("h")) %>% 
   filter(link_id %in% bikeObservations$link_id)
 
 bikeSimulationLong <- bikeSimulationFiltered %>% 
-  pivot_longer(cols = starts_with("X"), names_to="hour", values_to="sim_volume") %>% 
-  mutate(hour=as.double(str_remove(hour,"X"))) %>% 
+  pivot_longer(cols = starts_with("h"), names_to="hour", values_to="sim_volume") %>% 
+  mutate(hour=as.double(str_remove(hour,"h"))) %>% 
   mutate(sim_volume=sim_volume*10)  %>% # Because I used 10% sample 
   mutate(hour=case_when(hour==24 ~ 0,
                         hour==25 ~ 1,
@@ -383,7 +383,7 @@ bikeSimulationFiltered <- bikeSimulation %>%
 breakPoints <- pretty(bikeSimulationFiltered$volumeAdjusted, n = 6)
 
 ggplot(bikeSimulationFiltered) +
-  annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) +
+  annotation_map_tile(zoom=9, alpha=0.6) +
   geom_sf(aes(size=volumeAdjusted, colour=volumeAdjusted, alpha=volumeAdjusted)) +
   # geom_sf(aes( size=n, colour=n ))  +
   scale_color_viridis(option="magma", trans="sqrt", breaks=breakPoints, name="Daily volume" ) +
@@ -517,6 +517,7 @@ Hourly aggregated WAPE
 error_wape <- bikeDataPct.h %>% 
   ungroup() %>% 
   filter(!is.na(sim.pct.h)) %>% 
+  # filter(obs.pct.h!=0 & sim.pct.h!=0) %>% 
   # mutate(sim.pct.h=ifelse(, 0, sim.pct.h)) %>% 
   # filter(hour%in%7:18) %>% 
   group_by(hour) %>% 
@@ -571,7 +572,7 @@ ggsave(paste0(outputDir,"bikeGeh.png"), width= 50, height = 50, units="cm")
 
 
 
-```{r Reading input bike traffic data}
+```{r Reading input netwalk traffic data}
 
 walkObservations <- read_sf("./data/observationsJoined/walkObsJoined2Network.sqlite") %>% 
   dplyr::select(link_id_1, link_id_2, hour=time, obs_volume = hourly_counts) %>% 
@@ -587,12 +588,12 @@ walkSimulation <- read_sf("./data/simOutputJoined/networkLinksWithHourlyVol.sqli
 
 walkSimulationFiltered <- walkSimulation %>% 
   st_drop_geometry() %>% 
-  dplyr::select(link_id=id, starts_with("X")) %>% 
+  dplyr::select(link_id=id, starts_with("h")) %>% 
   filter(link_id %in% na.omit(c(walkObservations$link_id_1,walkObservations$link_id_2)))
 
 walkSimulationLong <- walkSimulationFiltered %>% 
-  pivot_longer(cols = starts_with("X"), names_to="hour", values_to="sim_volume") %>% 
-  mutate(hour=as.double(str_remove(hour,"X"))) %>% 
+  pivot_longer(cols = starts_with("h"), names_to="hour", values_to="sim_volume") %>% 
+  mutate(hour=as.double(str_remove(hour,"h"))) %>% 
   mutate(sim_volume=sim_volume*10)  %>% # Because I used 10% sample 
   mutate(hour=case_when(hour==24 ~ 0,
                         hour==25 ~ 1,
@@ -630,7 +631,7 @@ walkSimulationFiltered <- walkSimulation %>%
 breakPoints <- pretty(walkSimulationFiltered$volumeAdjusted, n = 6)
 
 ggplot(walkSimulationFiltered) +
-  annotation_map_tile(type="osmgrayscale",zoom=9, alpha=0.6) +
+  annotation_map_tile(zoom=9, alpha=0.6) +
   geom_sf(aes(size=volumeAdjusted, colour=volumeAdjusted, alpha=volumeAdjusted)) +
   # geom_sf(aes( size=n, colour=n ))  +
   scale_color_viridis(option="magma", trans="sqrt", breaks=breakPoints, name="Daily volume" ) +

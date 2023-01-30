@@ -35,3 +35,12 @@ grep "actstart\|actend" |
 cut -d "\"" -f 2,4,6,8,10 |
 sed -e "s/\"/,/g"|
 sed -e '1i\'$'\n''time,type,person,link,actType' | cat > person_act.txt
+
+# Waiting for PT
+
+zcat  $events_file| tail -n +3 | head -n -2 |
+grep "waitingForPt"|
+cut -d "\"" -f 2,4,6,8,10,12 |
+sed -e "s/\"/,/g"|
+sed -e '1i\'$'\n''time,type,person,agent,atStop,destinationStop'| cat > wait_pt.txt
+

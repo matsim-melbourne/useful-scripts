@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-FILE="$1""_bicycle"
+FILE="bicycle_""$1"
 
 zcat $1 |
 sed -e "s/bike/bicycle/g" |

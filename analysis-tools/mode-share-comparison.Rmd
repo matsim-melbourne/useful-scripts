@@ -164,7 +164,7 @@ censusJTW <- read_csv("~/ownCloud/Data/ABS_Census/SA3 (UR) and MTW15P Method of 
                         skip=9, ) %>%
   rename(HomeSA3=`SA3 (UR)`,
          MTW=`MTW15P Method of Travel to Work (15 travel modes)`) %>%
-  dplyr::select(-Counting, -X5) %>%
+  dplyr::select(HomeSA3, MTW, Count) %>%
   filter(!is.na(MTW)) %>% 
   filter(MTW!="Total") %>% 
   # filter(HomeSA3 %in% unique(HomeSA3)) %>% 

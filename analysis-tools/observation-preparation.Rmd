@@ -19,9 +19,9 @@ library(stringr)
 library(igraph)
 library(nngeo)  # for st_azimuth
 
-source('./functions/addNetworkDetails.R')
-source('./functions/convertXMLNetwork.R')
-source('./functions/prepareCarData.R')
+source('../network-tools/network-modification/addNetworkDetails.R')
+source('../network-tools/xml2sqlite/convertXMLNetwork.R')
+source('./prepareCarData.R')
 
 ```
 
@@ -47,7 +47,7 @@ if (file.exists("./data/networks/networkConverted.sqlite")) {
                           layer = "nodes", quiet=T) 
 }else{
   if (!dir.exists("./data/networks/")) dir.create("./data/networks/")
-  networkConverted <- convertXMLNetowrk(xmlFile = "./data/simOutputs/output_network.xml.gz",
+  networkConverted <- convertXMLNetowrk(xmlFile = "./data/sim-outputs/output_network.xml.gz",
                                         netCRS = 28355)
   networkNodes <- networkConverted[[1]]
   networkLinks <- networkConverted[[2]] %>% 
@@ -111,7 +111,7 @@ Plot of AM Peak Count locations
 amHighVolCarData %>% 
   st_centroid() %>% 
   ggplot() + 
-  annotation_map_tile(type="osmgrayscale",zoom=10, alpha=0.6) +
+  annotation_map_tile(zoom=10, alpha=0.6) +
   geom_sf(aes(color=total_vol)) +
   # scale_fill_viridis_c(trans = "sqrt", alpha = .8) +
   scale_color_viridis_c(option="magma", name="Traffic volume") +
@@ -177,7 +177,7 @@ Plot of PM Peak Count locations
 pmHighVolCarData %>% 
   st_centroid() %>% 
   ggplot() + 
-  annotation_map_tile(type="osmgrayscale",zoom=10, alpha=0.6) +
+  annotation_map_tile(zoom=10, alpha=0.6) +
   geom_sf(aes(color=total_vol)) +
   # scale_fill_viridis_c(trans = "sqrt", alpha = .8) +
   scale_color_viridis_c(option="magma", name="Traffic volume") +
@@ -347,7 +347,8 @@ cyclingObsJoined2Network %>%
   group_by(siteNumber,directionID) %>% 
   summarise(total_vol=sum(count)) %>%  
   ggplot() +
-  annotation_map_tile(type="osmgrayscale",zoom=10, alpha=0.8) +
+  # annotation_map_tile(type="osmgrayscale",zoom=10, alpha=0.8) +
+  annotation_map_tile(zoom=10, alpha=0.8) +
   geom_sf(aes(color=total_vol))  
 ```
 
@@ -427,7 +428,8 @@ Map of the train stops included for the calibration:
 stationDataWithGeom %>% 
   st_intersection(gMelbBoundary) %>%
   ggplot() +
-  annotation_map_tile(type="osmgrayscale",zoom=9) +
+  # annotation_map_tile(type="osmgrayscale",zoom=9) +
+  annotation_map_tile(zoom=9) +
   geom_sf(aes(color=Total, size= Total)) +
   scale_fill_viridis_c(trans = "sqrt", alpha = .4) 
 
@@ -571,7 +573,8 @@ walkDataCoordinated %>%
   group_by(Sensor_ID) %>% 
   summarise(total_vol=sum(Hourly_Counts)) %>% 
   ggplot() +
-  annotation_map_tile(type="osmgrayscale",zoom=12, alpha=0.8) +
+  # annotation_map_tile(type="osmgrayscale",zoom=12, alpha=0.8) +
+  annotation_map_tile(zoom=12, alpha=0.8) +
   geom_sf(aes(color=total_vol))  
 ```
 
