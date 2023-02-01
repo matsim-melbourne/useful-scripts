@@ -1,4 +1,6 @@
-library(tidyverse)
+library(dplyr)
+library(readr)
+library(ggplot2)
 
 netwalk_flag=T
 
@@ -36,9 +38,9 @@ vistaTripsCounted <- vistaTrips %>%
   filter(mode!="other") %>% 
   # counting trips per mode
   # count(mode) %>% 
-  filter(!is.na(WDTRIPWGT)) %>% 
+  filter(!is.na(CW_WDTRIPWGT_SA3)) %>% 
   group_by(mode) %>% 
-  summarise(n=sum(WDTRIPWGT)) %>% 
+  summarise(n=sum(CW_WDTRIPWGT_SA3)) %>% 
   # get the percentages
   mutate(pct=100*n/sum(n))
 # vistaTripsCounted
@@ -61,7 +63,7 @@ vistaJTW <- read_csv("./sample_data/vista/JTW_VISTA1218_V1.csv") %>%
   # Filtering to valid trips
   filter(JTWDIST>0) %>% 
   # Refactoring the linkmode in VISTA
-  mutate(mode=case_when(JTWMODE=="Bicycle" ~ "bicycle",
+  mutate(mode=case_when(JTWMODE=="Bicycle" ~ "bike",
                         JTWMODE=="Vehicle Driver" ~ "car", 
                         JTWMODE=="Walking" ~ "walk",
                         JTWMODE%in%c("Public Bus","Train","Tram") ~ "pt",
@@ -72,9 +74,9 @@ vistaJTW <- read_csv("./sample_data/vista/JTW_VISTA1218_V1.csv") %>%
 vistaJTWCounted <- vistaJTW %>% 
   # counting trips per mode
   # count(mode) %>% 
-  filter(!is.na(WDJTWWGT)) %>% 
+  filter(!is.na(CW_WDJTWWGT_SA3)) %>% 
   group_by(mode) %>% 
-  summarise(n=sum(WDJTWWGT)) %>% 
+  summarise(n=sum(CW_WDJTWWGT_SA3)) %>% 
   # get the percentages
   mutate(pct=100*n/sum(n))
 
@@ -94,8 +96,7 @@ simOutputJTWCounted <- simOutputJTW  %>%
 ### Plotting JTW trips
 
 workTripsJoined <-rbind(mutate(simOutputJTWCounted,source="Simulation Output"),
-                        mutate(vistaJTWCounted,source="VISTA 2012-18"),
-) %>% 
+                        mutate(vistaJTWCounted,source="VISTA 2012-18")) %>% 
   mutate(type="Mandatory trips - work")
 
 workTripsJoined %>% 
@@ -114,7 +115,7 @@ vistaEdu <- vistaTrips %>%
   # Filtering to valid trips
   filter(CUMDIST>0) %>% 
   # Refactoring the linkmode in VISTA
-  mutate(mode=case_when(LINKMODE=="Bicycle" ~ "bicycle",
+  mutate(mode=case_when(LINKMODE=="Bicycle" ~ "bike",
                         LINKMODE=="Vehicle Driver" ~ "car", 
                         LINKMODE=="Walking" ~ "walk",
                         LINKMODE%in%c("Public Bus","Train","Tram") ~ "pt",
@@ -125,9 +126,9 @@ vistaEdu <- vistaTrips %>%
 vistaEduCounted <- vistaEdu %>% 
   # counting trips per mode
   # count(mode) %>% 
-  filter(!is.na(WDTRIPWGT)) %>% 
+  filter(!is.na(CW_WDTRIPWGT_SA3)) %>% 
   group_by(mode) %>% 
-  summarise(n=sum(WDTRIPWGT)) %>% 
+  summarise(n=sum(CW_WDTRIPWGT_SA3)) %>% 
   # get the percentages
   mutate(pct=100*n/sum(n))
 
@@ -175,9 +176,9 @@ vistaDiscretionary <- vistaTrips %>%
 vistaDiscretionaryCounted <- vistaDiscretionary %>% 
   # counting trips per mode
   # count(mode) %>% 
-  filter(!is.na(WDTRIPWGT)) %>% 
+  filter(!is.na(CW_WDTRIPWGT_SA3)) %>% 
   group_by(mode) %>% 
-  summarise(n=sum(WDTRIPWGT)) %>% 
+  summarise(n=sum(CW_WDTRIPWGT_SA3)) %>% 
   # get the percentages
   mutate(pct=100*n/sum(n))
 
